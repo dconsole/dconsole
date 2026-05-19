@@ -144,6 +144,29 @@ func (t *Transport) Decode(v any) error {
 	return t.Raw.Decode(v)
 }
 
+// NewTransport constructs a Transport from a type name + nested config
+// struct, populating both the typed pointer fields and Raw so the
+// result is identical to one produced by yaml.Unmarshal. Use when
+// building aliases in-memory (tests, project generators, rsync's
+// internal exec helper). Panics on programmer-error inputs because
+// the only failure mode is "you handed me an unmarshalable config",
+// which is a build-time mistake.
+func NewTransport(typ string, cfg any) Transport {
+	doc := map[string]any{"type": typ}
+	if cfg != nil {
+		doc[typ] = cfg
+	}
+	body, err := yaml.Marshal(doc)
+	if err != nil {
+		panic("alias.NewTransport: marshal: " + err.Error())
+	}
+	var t Transport
+	if err := yaml.Unmarshal(body, &t); err != nil {
+		panic("alias.NewTransport: unmarshal: " + err.Error())
+	}
+	return t
+}
+
 type ExecTransport struct {
 	Dir string `yaml:"dir,omitempty"` // optional working directory
 }
@@ -213,6 +236,23 @@ func (p *Provider) UnmarshalYAML(n *yaml.Node) error {
 // factories to pull their typed config out of the opaque mapping.
 func (p *Provider) Decode(v any) error {
 	return p.Raw.Decode(v)
+}
+
+// NewProvider mirrors NewTransport for providers.
+func NewProvider(typ string, cfg any) Provider {
+	doc := map[string]any{"type": typ}
+	if cfg != nil {
+		doc[typ] = cfg
+	}
+	body, err := yaml.Marshal(doc)
+	if err != nil {
+		panic("alias.NewProvider: marshal: " + err.Error())
+	}
+	var p Provider
+	if err := yaml.Unmarshal(body, &p); err != nil {
+		panic("alias.NewProvider: unmarshal: " + err.Error())
+	}
+	return p
 }
 
 type IronstarProvider struct {

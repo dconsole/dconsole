@@ -21,10 +21,17 @@ func init() {
 	Register("ssh", Registration{
 		RequiredCLI: "ssh",
 		Build: func(a *alias.Alias) (Transport, error) {
-			if a.Transport.SSH == nil {
-				return nil, fmt.Errorf("transport type ssh requires an ssh: block")
+			var w struct {
+				SSH alias.SSHTransport `yaml:"ssh"`
 			}
-			return &sshTransport{cfg: a.Transport.SSH}, nil
+			if err := a.Transport.Decode(&w); err != nil {
+				return nil, fmt.Errorf("transport type ssh: %w", err)
+			}
+			if w.SSH.Host == "" {
+				return nil, fmt.Errorf("transport type ssh requires an ssh: block with host")
+			}
+			cfg := w.SSH
+			return &sshTransport{cfg: &cfg}, nil
 		},
 	})
 }

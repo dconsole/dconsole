@@ -60,7 +60,7 @@ esac
 		Site: "ex", Env: "src",
 		Root: remoteRoot,
 		Bin: alias.RemoteBin{Kind: "drush", Path: fakeBin},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 
 	// Use a fresh HOME so sitepath disk cache doesn't pollute the test.

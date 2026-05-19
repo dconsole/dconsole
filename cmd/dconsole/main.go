@@ -118,6 +118,18 @@ func run(ctx context.Context, args []string) error {
 		// URL in the local browser. Extra args (e.g. --name=admin, a
 		// destination path) are forwarded to drush.
 		return command.Login(ctx, a, rest[1:], os.Stdout)
+	case "-h", "--help":
+		// Show dconsole's merged help with the resolved alias as
+		// context. Without this the request falls through to drush,
+		// which interprets a bare --help as "help on no command" and
+		// errors with "Command '' is ambiguous".
+		return command.Help(ctx, a, os.Stdout, printUsage)
+	case "help":
+		// Bare `help` → merged help. `help <command>` keeps falling
+		// through to drush so users can read drush's per-command help.
+		if len(rest) == 1 {
+			return command.Help(ctx, a, os.Stdout, printUsage)
+		}
 	}
 
 	return command.Forward(ctx, a, rest)

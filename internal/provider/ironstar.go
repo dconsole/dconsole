@@ -25,16 +25,20 @@ func init() {
 	Register("ironstar", Registration{
 		RequiredCLI: "iron",
 		Build: func(a *alias.Alias) (Provider, error) {
-			if a.Provider.Ironstar == nil {
-				return nil, fmt.Errorf("provider type ironstar requires an ironstar: block")
+			var w struct {
+				Ironstar alias.IronstarProvider `yaml:"ironstar"`
 			}
-			if a.Provider.Ironstar.Subscription == "" {
+			if err := a.Provider.Decode(&w); err != nil {
+				return nil, fmt.Errorf("provider type ironstar: %w", err)
+			}
+			if w.Ironstar.Subscription == "" {
 				return nil, fmt.Errorf("ironstar provider requires subscription")
 			}
-			if a.Provider.Ironstar.Environment == "" {
+			if w.Ironstar.Environment == "" {
 				return nil, fmt.Errorf("ironstar provider requires environment")
 			}
-			return &ironstar{cfg: a.Provider.Ironstar, ironBin: "iron"}, nil
+			cfg := w.Ironstar
+			return &ironstar{cfg: &cfg, ironBin: "iron"}, nil
 		},
 	})
 }

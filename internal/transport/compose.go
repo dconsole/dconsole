@@ -19,13 +19,17 @@ func init() {
 	Register("compose", Registration{
 		RequiredCLI: "docker",
 		Build: func(a *alias.Alias) (Transport, error) {
-			if a.Transport.Compose == nil {
-				return nil, fmt.Errorf("transport type compose requires a compose: block")
+			var w struct {
+				Compose alias.ComposeTransport `yaml:"compose"`
 			}
-			if a.Transport.Compose.Service == "" {
+			if err := a.Transport.Decode(&w); err != nil {
+				return nil, fmt.Errorf("transport type compose: %w", err)
+			}
+			if w.Compose.Service == "" {
 				return nil, fmt.Errorf("compose transport requires service")
 			}
-			return &composeTransport{cfg: a.Transport.Compose}, nil
+			cfg := w.Compose
+			return &composeTransport{cfg: &cfg}, nil
 		},
 	})
 }

@@ -58,7 +58,7 @@ func TestLogin_OpensExtractedURL(t *testing.T) {
 	a := &alias.Alias{
 		Site: "ex", Env: "dev",
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	t.Setenv("HOME", t.TempDir())
 
@@ -92,7 +92,7 @@ func TestLogin_NoURLReturnsError(t *testing.T) {
 	a := &alias.Alias{
 		Site: "ex", Env: "dev",
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	t.Setenv("HOME", t.TempDir())
 
@@ -124,7 +124,7 @@ func TestLogin_ForwardsExtraArgs(t *testing.T) {
 	a := &alias.Alias{
 		Site: "ex", Env: "dev",
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	t.Setenv("HOME", t.TempDir())
 
@@ -161,7 +161,7 @@ func TestLogin_InjectsAliasURI(t *testing.T) {
 		Site: "ex", Env: "dev",
 		URI:       "https://app.example.com",
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	t.Setenv("HOME", t.TempDir())
 
@@ -197,7 +197,7 @@ func TestLogin_UserURIWins(t *testing.T) {
 		Site: "ex", Env: "dev",
 		URI:       "https://app.example.com",
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	t.Setenv("HOME", t.TempDir())
 
@@ -230,7 +230,7 @@ func TestLogin_NoURIWarns(t *testing.T) {
 	a := &alias.Alias{
 		Site: "ex", Env: "dev",
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	t.Setenv("HOME", t.TempDir())
 

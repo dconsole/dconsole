@@ -148,16 +148,13 @@ esac
 
 	source := &alias.Alias{
 		Site: "ex", Env: "prod",
-		Provider: alias.Provider{
-			Type: "ironstar",
-			Ironstar: &alias.IronstarProvider{
-				Subscription: "example-prod",
-				Environment:  "production",
-			},
-		},
+		Provider: alias.NewProvider("ironstar", alias.IronstarProvider{
+			Subscription: "example-prod",
+			Environment:  "production",
+		}),
 		// Transport is still required structurally but won't be used
 		// because the provider supplies the dump.
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	target := &alias.Alias{
 		Site: "ex", Env: "local",

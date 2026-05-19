@@ -219,7 +219,7 @@ func runLocal(ctx context.Context, argv []string, in io.Reader, out io.Writer) e
 	// Reuse the exec transport's mechanics by constructing an in-memory
 	// alias with transport: exec, then using Pipe. This keeps process
 	// spawning logic in one place (the exec transport).
-	a := &alias.Alias{Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}}}
+	a := &alias.Alias{Transport: alias.NewTransport("exec", nil)}
 	t, err := transport.For(a)
 	if err != nil {
 		return err

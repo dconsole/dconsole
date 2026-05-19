@@ -19,13 +19,17 @@ func init() {
 	Register("docker", Registration{
 		RequiredCLI: "docker",
 		Build: func(a *alias.Alias) (Transport, error) {
-			if a.Transport.Docker == nil {
-				return nil, fmt.Errorf("transport type docker requires a docker: block")
+			var w struct {
+				Docker alias.DockerTransport `yaml:"docker"`
 			}
-			if a.Transport.Docker.Container == "" {
+			if err := a.Transport.Decode(&w); err != nil {
+				return nil, fmt.Errorf("transport type docker: %w", err)
+			}
+			if w.Docker.Container == "" {
 				return nil, fmt.Errorf("docker transport requires a container name")
 			}
-			return &dockerTransport{cfg: a.Transport.Docker}, nil
+			cfg := w.Docker
+			return &dockerTransport{cfg: &cfg}, nil
 		},
 	})
 }

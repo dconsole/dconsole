@@ -57,7 +57,7 @@ func Detect(start string) (*Detection, error) {
 		d.Envs["local"] = alias.Alias{
 			URI:       "https://" + name + ".ddev.site",
 			Bin:       alias.RemoteBin{Kind: "auto"},
-			Transport: alias.Transport{Type: "ddev", DDEV: &alias.DDEVTransport{Project: name}},
+			Transport: alias.NewTransport("ddev", alias.DDEVTransport{Project: name}),
 		}
 		d.DefaultEnv = "local"
 	}

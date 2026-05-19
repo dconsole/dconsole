@@ -48,14 +48,11 @@ func TestAuth_RoutesToProvider(t *testing.T) {
 
 	a := &alias.Alias{
 		Site: "ex", Env: "prod",
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
-		Provider: alias.Provider{
-			Type: "ironstar",
-			Ironstar: &alias.IronstarProvider{
-				Subscription: "example-prod",
-				Environment:  "production",
-			},
-		},
+		Transport: alias.NewTransport("exec", nil),
+		Provider: alias.NewProvider("ironstar", alias.IronstarProvider{
+			Subscription: "example-prod",
+			Environment:  "production",
+		}),
 	}
 
 	var dconsoleOut bytes.Buffer
@@ -80,7 +77,7 @@ func TestAuth_RoutesToProvider(t *testing.T) {
 func TestAuth_NoOpWhenNoLoginCapable(t *testing.T) {
 	a := &alias.Alias{
 		Site: "ex", Env: "dev",
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	var out bytes.Buffer
 	if err := Auth(context.Background(), a, &out); err != nil {

@@ -80,13 +80,10 @@ func TestIronstarLoadForReturnsNotSupported(t *testing.T) {
 
 func TestIronstarRegistryWiresFromAlias(t *testing.T) {
 	a := &alias.Alias{
-		Provider: alias.Provider{
-			Type: "ironstar",
-			Ironstar: &alias.IronstarProvider{
-				Subscription: "s",
-				Environment:  "e",
-			},
-		},
+		Provider: alias.NewProvider("ironstar", alias.IronstarProvider{
+			Subscription: "s",
+			Environment:  "e",
+		}),
 	}
 	p, err := For(a)
 	if err != nil {

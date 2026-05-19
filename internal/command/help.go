@@ -112,6 +112,7 @@ func Help(ctx context.Context, a *alias.Alias, out io.Writer, fallback func(io.W
 	cmd := bin.Argv([]string{"list", "--format=json"})
 	if err := t.Pipe(ctx, cmd, nil, &stdout); err != nil {
 		helpDebug("list --format=json failed: %v (out: %d bytes)", err, stdout.Len())
+		fmt.Fprintf(out, "Note: drush on @%s.%s does not support `list --format=json` (likely an older Drush). Showing dconsole built-ins only.\n\n", a.Site, a.Env)
 		fallback(out)
 		return nil
 	}

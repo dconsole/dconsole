@@ -20,13 +20,17 @@ func init() {
 	Register("lando", Registration{
 		RequiredCLI: "lando",
 		Build: func(a *alias.Alias) (Transport, error) {
-			if a.Transport.Lando == nil {
-				return nil, fmt.Errorf("transport type lando requires a lando: block")
+			var w struct {
+				Lando alias.LandoTransport `yaml:"lando"`
 			}
-			if a.Transport.Lando.AppDir == "" {
+			if err := a.Transport.Decode(&w); err != nil {
+				return nil, fmt.Errorf("transport type lando: %w", err)
+			}
+			if w.Lando.AppDir == "" {
 				return nil, fmt.Errorf("lando transport requires app_dir (the Lando project root)")
 			}
-			return &landoTransport{cfg: a.Transport.Lando}, nil
+			cfg := w.Lando
+			return &landoTransport{cfg: &cfg}, nil
 		},
 	})
 }

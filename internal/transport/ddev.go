@@ -25,17 +25,21 @@ func init() {
 	Register("ddev", Registration{
 		RequiredCLI: "ddev",
 		Build: func(a *alias.Alias) (Transport, error) {
-			if a.Transport.DDEV == nil {
-				return nil, fmt.Errorf("transport type ddev requires a ddev: block")
+			var w struct {
+				DDEV alias.DDEVTransport `yaml:"ddev"`
 			}
-			if a.Transport.DDEV.Project == "" {
+			if err := a.Transport.Decode(&w); err != nil {
+				return nil, fmt.Errorf("transport type ddev: %w", err)
+			}
+			if w.DDEV.Project == "" {
 				return nil, fmt.Errorf("ddev transport requires project (the project name passed to `ddev describe`)")
 			}
 			approot, err := findDDEVApproot(a.Root)
 			if err != nil {
 				return nil, fmt.Errorf("ddev transport: %w", err)
 			}
-			return &ddevTransport{cfg: a.Transport.DDEV, approot: approot}, nil
+			cfg := w.DDEV
+			return &ddevTransport{cfg: &cfg, approot: approot}, nil
 		},
 	})
 }

@@ -23,12 +23,17 @@ func init() {
 		// exec runs commands directly via os/exec.Command — no external CLI
 		// to depend on, so RequiredCLI is empty.
 		Build: func(a *alias.Alias) (Transport, error) {
-			// No required fields; the block may be omitted entirely.
-			cfg := a.Transport.Exec
-			if cfg == nil {
-				cfg = &alias.ExecTransport{}
+			// No required fields; the exec: block may be omitted entirely.
+			var w struct {
+				Exec alias.ExecTransport `yaml:"exec"`
 			}
-			return &execTransport{cfg: cfg}, nil
+			if a.Transport.Raw.Kind != 0 {
+				if err := a.Transport.Decode(&w); err != nil {
+					return nil, fmt.Errorf("transport type exec: %w", err)
+				}
+			}
+			cfg := w.Exec
+			return &execTransport{cfg: &cfg}, nil
 		},
 	})
 }

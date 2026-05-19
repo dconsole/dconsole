@@ -19,13 +19,17 @@ func init() {
 	Register("kubectl", Registration{
 		RequiredCLI: "kubectl",
 		Build: func(a *alias.Alias) (Transport, error) {
-			if a.Transport.Kubectl == nil {
-				return nil, fmt.Errorf("transport type kubectl requires a kubectl: block")
+			var w struct {
+				Kubectl alias.KubectlTransport `yaml:"kubectl"`
 			}
-			if a.Transport.Kubectl.Resource == "" {
+			if err := a.Transport.Decode(&w); err != nil {
+				return nil, fmt.Errorf("transport type kubectl: %w", err)
+			}
+			if w.Kubectl.Resource == "" {
 				return nil, fmt.Errorf("kubectl transport requires resource (e.g. deployment/drupal or pods/foo)")
 			}
-			return &kubectlTransport{cfg: a.Transport.Kubectl}, nil
+			cfg := w.Kubectl
+			return &kubectlTransport{cfg: &cfg}, nil
 		},
 	})
 }

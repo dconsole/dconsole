@@ -59,7 +59,7 @@ func TestHelp_MergesDrushAndDconsoleCommands(t *testing.T) {
 	a := &alias.Alias{
 		Site: "demo", Env: "dev",
 		Bin:       alias.RemoteBin{Kind: "drush", Path: bin},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	t.Setenv("HOME", t.TempDir())
 
@@ -112,7 +112,7 @@ func TestHelp_DconsoleWinsOnNameClash(t *testing.T) {
 	a := &alias.Alias{
 		Site: "demo", Env: "dev",
 		Bin:       alias.RemoteBin{Kind: "drush", Path: bin},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	t.Setenv("HOME", t.TempDir())
 
@@ -145,7 +145,7 @@ func TestHelp_FallsBackOnBadJSON(t *testing.T) {
 	a := &alias.Alias{
 		Site: "demo", Env: "dev",
 		Bin:       alias.RemoteBin{Kind: "drush", Path: bin},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	t.Setenv("HOME", t.TempDir())
 
@@ -187,7 +187,7 @@ func TestHelp_TolerantOfPrefixGarbage(t *testing.T) {
 	a := &alias.Alias{
 		Site: "demo", Env: "dev",
 		Bin:       alias.RemoteBin{Kind: "drush", Path: bin},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Transport: alias.NewTransport("exec", nil),
 	}
 	t.Setenv("HOME", t.TempDir())
 
