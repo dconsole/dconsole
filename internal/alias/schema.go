@@ -1,5 +1,7 @@
 package alias
 
+import "gopkg.in/yaml.v3"
+
 // AliasFile is the top-level structure of an `*.site.yml` file.
 // Keys are environment names (dev, stage, prod, …). A reserved `_defaults`
 // key is merged into every other env in the same file.
@@ -97,15 +99,49 @@ type RemoteBin struct {
 }
 
 // Transport selects how dconsole reaches the remote.
+//
+// In-tree transports get their typed config decoded into the matching
+// pointer field (Exec, SSH, …) by yaml.v3. Out-of-tree subprocess
+// plugins access their raw YAML block via Raw and decode it with
+// Decode(&cfg). Raw is populated for every Transport, in-tree or not.
 type Transport struct {
-	Type    string         `yaml:"type"`
-	Exec    *ExecTransport `yaml:"exec,omitempty"`
-	SSH     *SSHTransport  `yaml:"ssh,omitempty"`
+	Type    string            `yaml:"type"`
+	Exec    *ExecTransport    `yaml:"exec,omitempty"`
+	SSH     *SSHTransport     `yaml:"ssh,omitempty"`
 	Docker  *DockerTransport  `yaml:"docker,omitempty"`
 	Compose *ComposeTransport `yaml:"compose,omitempty"`
 	Kubectl *KubectlTransport `yaml:"kubectl,omitempty"`
 	DDEV    *DDEVTransport    `yaml:"ddev,omitempty"`
 	Lando   *LandoTransport   `yaml:"lando,omitempty"`
+
+	// Raw is the original YAML mapping node so plugin transports can
+	// decode their own config block via Decode(). Populated by
+	// UnmarshalYAML; not emitted on marshal (write-path uses the typed
+	// fields).
+	Raw yaml.Node `yaml:"-"`
+}
+
+// UnmarshalYAML decodes both the typed convenience fields and captures
+// the raw node so plugin factories can decode their own block.
+func (t *Transport) UnmarshalYAML(n *yaml.Node) error {
+	// Decode into a shadow type to avoid recursion into this method.
+	type plain Transport
+	var p plain
+	if err := n.Decode(&p); err != nil {
+		return err
+	}
+	*t = Transport(p)
+	t.Raw = *n
+	return nil
+}
+
+// Decode unmarshals the transport's YAML block into v. Use from
+// out-of-tree (or in-tree future) factories to pull their typed config:
+//
+//	var cfg myTransport
+//	if err := a.Transport.Decode(&cfg); err != nil { … }
+func (t *Transport) Decode(v any) error {
+	return t.Raw.Decode(v)
 }
 
 type ExecTransport struct {
@@ -149,10 +185,34 @@ type LandoTransport struct {
 	Service string `yaml:"service,omitempty"`
 }
 
-// Provider attaches a hosting-provider plugin to an alias.
+// Provider attaches a hosting-provider plugin to an alias. Mirrors
+// Transport: typed in-tree blocks (Ironstar, …) decode automatically;
+// plugin providers access the raw YAML via Raw + Decode().
 type Provider struct {
-	Type     string                `yaml:"type"`
-	Ironstar *IronstarProvider     `yaml:"ironstar,omitempty"`
+	Type     string            `yaml:"type"`
+	Ironstar *IronstarProvider `yaml:"ironstar,omitempty"`
+
+	// Raw captures the YAML mapping for plugin providers to decode.
+	Raw yaml.Node `yaml:"-"`
+}
+
+// UnmarshalYAML mirrors Transport.UnmarshalYAML — typed fields decode
+// normally, Raw captures the whole node.
+func (p *Provider) UnmarshalYAML(n *yaml.Node) error {
+	type plain Provider
+	var tmp plain
+	if err := n.Decode(&tmp); err != nil {
+		return err
+	}
+	*p = Provider(tmp)
+	p.Raw = *n
+	return nil
+}
+
+// Decode unmarshals the provider's YAML block into v. Use from plugin
+// factories to pull their typed config out of the opaque mapping.
+func (p *Provider) Decode(v any) error {
+	return p.Raw.Decode(v)
 }
 
 type IronstarProvider struct {
