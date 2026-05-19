@@ -40,6 +40,8 @@ func Inspect(ctx context.Context, loader *alias.Loader, args []string, out io.Wr
 	case "alias:convert":
 		fmt.Fprintln(out, "command: alias:convert  (local YAML transformation, no transport)")
 		return nil
+	case "-h", "--help", "help":
+		return inspectHelp(ctx, loader, out)
 	}
 
 	// Default path: contextual resolution then forward.
@@ -135,6 +137,51 @@ func Inspect(ctx context.Context, loader *alias.Loader, args []string, out io.Wr
 	fmt.Fprintf(out, "  forward %q to remote %s\n", strings.Join(rest, " "), bin.Kind)
 	fmt.Fprintf(out, "  remote argv: %s\n", quoteJoin(remoteArgv))
 	fmt.Fprintf(out, "  would run:   %s\n", quoteJoin(localArgv))
+	return nil
+}
+
+// inspectHelp describes what `dconsole --help` would do: which alias
+// it'd resolve, whether the transport is reachable, and the exact
+// `<bin> list --format=json` invocation that would be merged with
+// dconsole's built-ins. If anything would force a fallback, it says so.
+func inspectHelp(ctx context.Context, loader *alias.Loader, out io.Writer) error {
+	fmt.Fprintln(out, "─── help plan ─────────────────────────────────────────")
+	a, err := HelpContext(loader)
+	if err != nil {
+		fmt.Fprintf(out, "  context resolution error: %v\n", err)
+		fmt.Fprintln(out, "  → would fall back to dconsole-only usage")
+		return nil
+	}
+	if a == nil {
+		fmt.Fprintln(out, "  no project context (no dconsole.yml with default_env in cwd or any parent)")
+		fmt.Fprintln(out, "  → would fall back to dconsole-only usage")
+		return nil
+	}
+	fmt.Fprintf(out, "  context:    @%s.%s\n", a.Site, a.Env)
+	fmt.Fprintf(out, "  uri:        %s\n", a.URI)
+	fmt.Fprintf(out, "  transport:  %s\n", a.Transport.Type)
+
+	t, err := transport.For(a)
+	if err != nil {
+		fmt.Fprintf(out, "  ⚠ transport.For: %v → would fall back\n", err)
+		return nil
+	}
+	if err := t.Available(); err != nil {
+		fmt.Fprintf(out, "  ⚠ transport not available: %v → would fall back\n", err)
+		return nil
+	}
+	bin, ok := remotebin.Resolve(a)
+	if !ok {
+		fmt.Fprintln(out, "  bin:        auto (would probe on invocation — failure here forces fallback)")
+		fmt.Fprintln(out, "  planned:    <probed-bin> list --format=json")
+	} else {
+		argv := bin.Argv([]string{"list", "--format=json"})
+		fmt.Fprintf(out, "  bin:        %s @ %s\n", bin.Kind, bin.Path)
+		fmt.Fprintf(out, "  remote argv: %s\n", quoteJoin(argv))
+		fmt.Fprintf(out, "  would run:   %s\n", quoteJoin(t.Preview(argv)))
+	}
+	fmt.Fprintln(out, "  on success: parse JSON, merge dconsole built-ins by namespace, render drush-style listing")
+	fmt.Fprintln(out, "  on failure: fall back to dconsole-only usage (set DCONSOLE_HELP_DEBUG=1 to see why)")
 	return nil
 }
 
