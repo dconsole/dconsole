@@ -1,0 +1,18 @@
+# Example dconsole site file using the `echo` plugin transport.
+# Drop this into one of dconsole's site directories (renamed to
+# echo.site.yml) and run `dconsole @echo.dev <cmd>` to see what the
+# subprocess plugin protocol looks like in action.
+
+dev:
+  uri: https://example.test
+  root: /var/www/example
+  bin:
+    kind: drush
+    path: drush
+  transport:
+    type: echo
+    # The echo plugin doesn't read any config, but a real plugin would
+    # have its own block here, e.g.:
+    # echo:
+    #   verbose: true
+    #   tag: example
