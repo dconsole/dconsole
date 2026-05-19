@@ -1,56 +1,87 @@
 package command
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"os/exec"
+	"regexp"
+	"runtime"
 
 	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/provider"
 	"github.com/heydon/dconsole/internal/transport"
 )
 
-// LoginCapable is the duck-typed interface for transports and providers
-// that have a login step (interactive auth, MFA, token refresh, etc.).
-// Both provider.Provider and transport.Transport may implement it; any
-// that don't are silently skipped.
-type LoginCapable interface {
-	Login(ctx context.Context, a *alias.Alias) error
-}
-
-// Login runs the login flow for an alias. If both the alias's provider
-// AND transport implement LoginCapable, both are invoked (provider
-// first — providers typically own the credential store). If neither
-// does, a clear "nothing to log into" message is printed.
-func Login(ctx context.Context, a *alias.Alias, out io.Writer) error {
-	ran := 0
-
-	if p, _ := provider.For(a); p != nil {
-		if lc, ok := p.(LoginCapable); ok {
-			fmt.Fprintf(out, "logging in via provider %s\n", p.Name())
-			if err := lc.Login(ctx, a); err != nil {
-				return fmt.Errorf("%s login: %w", p.Name(), err)
-			}
-			ran++
-		}
+// Login runs `drush user:login` on the alias and opens the resulting
+// one-time login URL in the local browser. Extra args (e.g. --name=admin,
+// --uri=…, a destination path) are forwarded to drush.
+func Login(ctx context.Context, a *alias.Alias, args []string, out io.Writer) error {
+	t, err := transport.For(a)
+	if err != nil {
+		return err
+	}
+	if err := t.Available(); err != nil {
+		return err
+	}
+	bin, err := resolveBin(ctx, a, t)
+	if err != nil {
+		return err
 	}
 
-	if t, err := transport.For(a); err == nil {
-		if lc, ok := t.(LoginCapable); ok {
-			fmt.Fprintf(out, "logging in via transport %s\n", t.Name())
-			if err := lc.Login(ctx, a); err != nil {
-				return fmt.Errorf("%s login: %w", t.Name(), err)
-			}
-			ran++
+	cmd := bin.Argv(append([]string{"user:login"}, args...))
+	var stdout, stderr bytes.Buffer
+	pipeErr := t.Pipe(ctx, cmd, nil, &stdout)
+
+	url := extractLoginURL(stdout.String())
+	if url == "" {
+		if pipeErr != nil {
+			return fmt.Errorf("drush user:login: %w\noutput:\n%s%s", pipeErr, stdout.String(), stderr.String())
 		}
+		return fmt.Errorf("drush user:login produced no URL\noutput:\n%s", stdout.String())
+	}
+	if pipeErr != nil {
+		// drush printed a URL but exited non-zero — surface the warning but
+		// still try to open the URL.
+		fmt.Fprintf(out, "warning: drush user:login exited with error: %v\n", pipeErr)
 	}
 
-	if ran == 0 {
-		fmt.Fprintf(out, "@%s.%s has no login step (transport=%s", a.Site, a.Env, a.Transport.Type)
-		if a.Provider.Type != "" {
-			fmt.Fprintf(out, ", provider=%s", a.Provider.Type)
-		}
-		fmt.Fprintln(out, ")")
+	fmt.Fprintln(out, url)
+	if err := openBrowser(url); err != nil {
+		return fmt.Errorf("open browser: %w", err)
 	}
 	return nil
+}
+
+// loginURLRE matches a URL in drush user:login output. Drush prints the
+// one-time-login URL on its own line; we accept it anywhere in stdout to
+// tolerate prefix text from older drush versions.
+var loginURLRE = regexp.MustCompile(`https?://[^\s'"<>]+`)
+
+func extractLoginURL(s string) string {
+	return loginURLRE.FindString(s)
+}
+
+// openBrowser is a package var so tests can stub it. The default uses
+// the OS's URL handler.
+var openBrowser = openBrowserDefault
+
+func openBrowserDefault(url string) error {
+	var name string
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		name = "open"
+		args = []string{url}
+	case "windows":
+		name = "rundll32"
+		args = []string{"url.dll,FileProtocolHandler", url}
+	default:
+		// linux, freebsd, openbsd, netbsd — xdg-open is the de-facto
+		// portable launcher.
+		name = "xdg-open"
+		args = []string{url}
+	}
+	c := exec.Command(name, args...)
+	return c.Start()
 }

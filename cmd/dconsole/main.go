@@ -107,10 +107,15 @@ func run(ctx context.Context, args []string) error {
 			workDir = rest[1]
 		}
 		return command.Shell(ctx, a, workDir)
-	case "login":
-		// Run the alias's transport/provider login flow (e.g. `iron login`,
+	case "auth":
+		// Run the alias's transport/provider auth flow (e.g. `iron login`,
 		// `skpr login`). No-op for transports/providers that don't need it.
-		return command.Login(ctx, a, os.Stdout)
+		return command.Auth(ctx, a, os.Stdout)
+	case "login":
+		// Run `drush user:login` and open the resulting one-time login
+		// URL in the local browser. Extra args (e.g. --name=admin, a
+		// destination path) are forwarded to drush.
+		return command.Login(ctx, a, rest[1:], os.Stdout)
 	}
 
 	return command.Forward(ctx, a, rest)
@@ -232,7 +237,8 @@ Usage:
   dconsole @env <command>                   # short form: site inferred from local dconsole.yml
   dconsole <command>                        # no alias: uses dconsole.yml default_env, else local cwd
   dconsole @site.env sh    (or ssh)         # interactive shell on the remote, no drush loaded
-  dconsole @site.env login                  # run provider/transport login (e.g. iron login)
+  dconsole @site.env auth                   # run provider/transport auth (e.g. iron login)
+  dconsole @site.env login [drush uli args] # drush user:login → open one-time URL in your browser
   dconsole site:alias                       # list known aliases
   dconsole transport:list                   # report which transports are usable on this machine
   dconsole sql:sync @src.env @dst.env [--force]  # dump source DB, import into target (transport-agnostic)
