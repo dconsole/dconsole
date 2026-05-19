@@ -56,7 +56,19 @@ func LoadManifest(path string) (*Manifest, error) {
 		}
 	}
 	if m.Project == "" {
-		return nil, fmt.Errorf("%s: missing required `project:` key", path)
+		// Default to the manifest's parent directory name. Mirrors how
+		// npm / composer / cargo default a project name when the file
+		// lives in a directory named after the project — avoids a
+		// confusing "missing required `project:` key" error when the
+		// generated header has commented the line out.
+		absForName, err := filepath.Abs(path)
+		if err != nil {
+			return nil, err
+		}
+		m.Project = filepath.Base(filepath.Dir(absForName))
+		if m.Project == "" || m.Project == "." || m.Project == "/" {
+			return nil, fmt.Errorf("%s: missing `project:` key and could not infer one from the directory", path)
+		}
 	}
 	if node, ok := raw["_defaults"]; ok {
 		if err := node.Decode(&m.Defaults); err != nil {

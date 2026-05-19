@@ -83,14 +83,43 @@ dev:
 	}
 }
 
-func TestLoadManifest_MissingProject(t *testing.T) {
-	dir := t.TempDir()
+func TestLoadManifest_MissingProjectInfersFromDir(t *testing.T) {
+	// When project: is missing, dconsole defaults to the parent
+	// directory's basename — same convention as npm/composer/cargo.
+	root := t.TempDir()
+	dir := filepath.Join(root, "my-cool-project")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(dir, "dconsole.yml")
 	if err := os.WriteFile(path, []byte("dev:\n  uri: x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadManifest(path); err == nil {
-		t.Error("expected error for missing project: key")
+	m, err := LoadManifest(path)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	if m.Project != "my-cool-project" {
+		t.Errorf("Project = %q, want %q (basename of containing dir)", m.Project, "my-cool-project")
+	}
+}
+
+func TestLoadManifest_ExplicitProjectWins(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "dir-name")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "dconsole.yml")
+	if err := os.WriteFile(path, []byte("project: explicit-name\ndev:\n  uri: x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m, err := LoadManifest(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Project != "explicit-name" {
+		t.Errorf("Project = %q, want %q (explicit YAML value should win over dir basename)", m.Project, "explicit-name")
 	}
 }
 
