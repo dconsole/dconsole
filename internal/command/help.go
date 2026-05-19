@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -108,30 +109,57 @@ func Help(ctx context.Context, a *alias.Alias, out io.Writer, fallback func(io.W
 		return nil
 	}
 
+	// Try drush 9+ first: list --format=json.
 	var stdout bytes.Buffer
 	cmd := bin.Argv([]string{"list", "--format=json"})
+	jsonErr := t.Pipe(ctx, cmd, nil, &stdout)
+	if jsonErr == nil {
+		if help, ok := tryJSON(stdout.Bytes()); ok {
+			renderMergedHelp(out, a, help)
+			return nil
+		}
+		helpDebug("list --format=json: invalid JSON, will try plain-text fallback")
+	} else {
+		helpDebug("list --format=json failed: %v (out: %d bytes); will try plain-text fallback", jsonErr, stdout.Len())
+	}
+
+	// Drush 8 fallback: parse `drush help` plain text.
+	stdout.Reset()
+	cmd = bin.Argv([]string{"help"})
 	if err := t.Pipe(ctx, cmd, nil, &stdout); err != nil {
-		helpDebug("list --format=json failed: %v (out: %d bytes)", err, stdout.Len())
-		fmt.Fprintf(out, "Note: drush on @%s.%s does not support `list --format=json` (likely an older Drush). Showing dconsole built-ins only.\n\n", a.Site, a.Env)
+		helpDebug("drush help (plain text) failed: %v", err)
+		fmt.Fprintf(out, "Note: couldn't reach drush on @%s.%s (neither JSON nor plain-text help). Showing dconsole built-ins only.\n\n", a.Site, a.Env)
 		fallback(out)
 		return nil
 	}
+	if help, ok := parseDrush8Help(stdout.String()); ok {
+		renderMergedHelp(out, a, help)
+		return nil
+	}
+	helpDebug("plain-text parse found no commands; falling back to dconsole-only listing")
+	fmt.Fprintf(out, "Note: drush on @%s.%s emitted help in a format dconsole doesn't recognise. Showing dconsole built-ins only.\n\n", a.Site, a.Env)
+	fallback(out)
+	return nil
+}
 
-	var help drushListJSON
-	// drush sometimes prints status/banner lines before the JSON; trim to
-	// the first '{' to be tolerant.
-	body := stdout.Bytes()
+// tryJSON parses drush 9+ list --format=json output. Returns ok=false
+// if the body doesn't look like JSON or doesn't contain any commands.
+func tryJSON(body []byte) (*drushListJSON, bool) {
+	// Trim leading non-JSON noise (banner lines, deprecation notices).
 	if i := bytes.IndexByte(body, '{'); i > 0 {
 		body = body[i:]
 	}
-	if err := json.Unmarshal(body, &help); err != nil {
-		helpDebug("json unmarshal failed: %v (body: %s)", err, truncate(string(body), 200))
-		fallback(out)
-		return nil
+	if len(body) == 0 || body[0] != '{' {
+		return nil, false
 	}
-
-	renderMergedHelp(out, a, &help)
-	return nil
+	var help drushListJSON
+	if err := json.Unmarshal(body, &help); err != nil {
+		return nil, false
+	}
+	if len(help.Commands) == 0 {
+		return nil, false
+	}
+	return &help, true
 }
 
 func truncate(s string, n int) string {
@@ -141,6 +169,157 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
+// drush 8 category header: "Core Drush commands: (core)".
+var drush8CategoryRE = regexp.MustCompile(`^([A-Z].*?):\s*\(([a-z][a-z0-9_-]*)\)\s*$`)
+
+// parseDrush8Help parses drush 8's textual `drush help` output into the
+// same drushListJSON shape our JSON path produces. Returns ok=false if
+// the input doesn't look like drush 8 help (no recognised commands).
+//
+// Drush 8 formats the listing as two columns: name + parenthesised
+// aliases on the left (~22 chars), description on the right. Both sides
+// can wrap across multiple lines. We track paren balance so alias
+// continuation lines don't get mistaken for new commands.
+func parseDrush8Help(text string) (*drushListJSON, bool) {
+	help := &drushListJSON{}
+	help.Application.Name = "Drush"
+	// Drush 8 doesn't print a version in `drush help` output; users
+	// can run `drush --version` if they need it.
+
+	type cmdEntry struct {
+		Name, Description string
+	}
+	var (
+		currentCategory string
+		inParen         int // unmatched open parens from previous lines
+		nsCommands      = map[string][]string{}
+		categoryOrder   []string
+	)
+
+	for _, line := range strings.Split(text, "\n") {
+		// Category header?
+		if m := drush8CategoryRE.FindStringSubmatch(strings.TrimRight(line, " \t\r")); m != nil {
+			currentCategory = m[2]
+			if _, seen := nsCommands[currentCategory]; !seen {
+				categoryOrder = append(categoryOrder, currentCategory)
+				nsCommands[currentCategory] = nil
+			}
+			inParen = 0
+			continue
+		}
+
+		// Need a leading space (command lines and continuations start indented).
+		if len(line) == 0 || line[0] != ' ' {
+			inParen = 0
+			continue
+		}
+
+		trimmed := strings.TrimLeft(line, " ")
+		if trimmed == "" {
+			continue
+		}
+
+		// Continuation of a wrapped alias list — first non-space char
+		// is an alias-continuation token or a closing paren.
+		if inParen > 0 {
+			inParen += strings.Count(trimmed, "(") - strings.Count(trimmed, ")")
+			if inParen < 0 {
+				inParen = 0
+			}
+			continue
+		}
+
+		// Skip global option lines (start with '-').
+		if trimmed[0] == '-' {
+			continue
+		}
+
+		// Alias continuation that opens a paren on a new line, e.g.
+		//   archive-restore   Expand a site archive…
+		//   (arr,
+		//   archive:restore)
+		// The "(arr," line starts after a command with no open parens
+		// but is itself the start of a wrapped alias group.
+		if trimmed[0] == '(' {
+			inParen += strings.Count(trimmed, "(") - strings.Count(trimmed, ")")
+			if inParen < 0 {
+				inParen = 0
+			}
+			continue
+		}
+		name, desc, openParens, ok := parseDrush8CommandLine(trimmed)
+		if !ok || currentCategory == "" {
+			continue
+		}
+		help.Commands = append(help.Commands, struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			Hidden      bool   `json:"hidden"`
+		}{Name: name, Description: desc})
+		nsCommands[currentCategory] = append(nsCommands[currentCategory], name)
+		inParen += openParens
+		_ = cmdEntry{}
+	}
+
+	if len(help.Commands) == 0 {
+		return nil, false
+	}
+
+	for _, id := range categoryOrder {
+		help.Namespaces = append(help.Namespaces, struct {
+			ID       string   `json:"id"`
+			Commands []string `json:"commands"`
+		}{ID: id, Commands: nsCommands[id]})
+	}
+	return help, true
+}
+
+// parseDrush8CommandLine pulls (name, description, openParens) from the
+// first line of a drush 8 command entry. Returns ok=false if the line
+// doesn't look like a command line.
+//
+// Example inputs:
+//
+//	"archive-dump (ard,    Backup your code, files, …"
+//	"core-status (status,  Provides a birds-eye view …"
+//	"do:sanitize           Performs database sanitization."
+func parseDrush8CommandLine(s string) (name, desc string, openParens int, ok bool) {
+	// The name is the first token. drush 8 command names allow lowercase
+	// letters, digits, hyphens, colons, underscores.
+	end := 0
+	for end < len(s) {
+		c := s[end]
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == ':' || c == '_' {
+			end++
+			continue
+		}
+		break
+	}
+	if end == 0 {
+		return "", "", 0, false
+	}
+	name = s[:end]
+	rest := s[end:]
+
+	// Split the remainder on 2+ spaces — the left column ends at the
+	// gap between aliases and description. If there's no such gap, the
+	// line continues with no description (aliases-only line); we still
+	// consider it a valid command line and use an empty description.
+	gap := regexp.MustCompile(`\s{2,}`).FindStringIndex(rest)
+	if gap == nil {
+		desc = ""
+	} else {
+		// Anything before the gap is alias material (or empty).
+		left := rest[:gap[0]]
+		openParens = strings.Count(left, "(") - strings.Count(left, ")")
+		if openParens < 0 {
+			openParens = 0
+		}
+		desc = strings.TrimSpace(rest[gap[1]:])
+	}
+	return name, desc, openParens, true
+}
+
 // renderMergedHelp writes a drush-like grouped help listing. dconsole
 // built-ins are merged into drush's namespaces by prefix; conflicts on
 // command name resolve in favour of dconsole (since dconsole intercepts).
@@ -148,11 +327,12 @@ func truncate(s string, n int) string {
 func renderMergedHelp(out io.Writer, a *alias.Alias, help *drushListJSON) {
 	appName := help.Application.Name
 	appVer := help.Application.Version
-	header := "dconsole"
-	if appName != "" {
+	header := fmt.Sprintf("dconsole — on @%s.%s", a.Site, a.Env)
+	switch {
+	case appName != "" && appVer != "":
 		header = fmt.Sprintf("dconsole — proxy to %s %s on @%s.%s", appName, appVer, a.Site, a.Env)
-	} else {
-		header = fmt.Sprintf("dconsole — on @%s.%s", a.Site, a.Env)
+	case appName != "":
+		header = fmt.Sprintf("dconsole — proxy to %s on @%s.%s", appName, a.Site, a.Env)
 	}
 	fmt.Fprintln(out, header)
 	fmt.Fprintln(out)
@@ -176,12 +356,25 @@ func renderMergedHelp(out io.Writer, a *alias.Alias, help *drushListJSON) {
 		byName[b.Name] = helpEntry{Name: b.Name, Description: desc, Dconsole: true}
 	}
 
-	// Bucket by namespace (prefix before ':', else "_global").
+	// Bucket by namespace. drush ships an explicit namespaces list, so
+	// prefer that (it handles drush 8 categories whose command names
+	// don't use colons). Fall back to prefix-inference for any command
+	// not listed in help.Namespaces, which also handles dconsole's
+	// own built-ins (sql:sync, project:list, …).
+	explicitNS := make(map[string]string)
+	for _, ns := range help.Namespaces {
+		for _, cmd := range ns.Commands {
+			explicitNS[cmd] = ns.ID
+		}
+	}
 	buckets := make(map[string][]helpEntry)
 	for _, e := range byName {
-		ns := "_global"
-		if i := strings.Index(e.Name, ":"); i > 0 {
-			ns = e.Name[:i]
+		ns, ok := explicitNS[e.Name]
+		if !ok {
+			ns = "_global"
+			if i := strings.Index(e.Name, ":"); i > 0 {
+				ns = e.Name[:i]
+			}
 		}
 		buckets[ns] = append(buckets[ns], e)
 	}
