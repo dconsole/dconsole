@@ -16,14 +16,17 @@ type dockerTransport struct {
 }
 
 func init() {
-	Register("docker", func(a *alias.Alias) (Transport, error) {
-		if a.Transport.Docker == nil {
-			return nil, fmt.Errorf("transport type docker requires a docker: block")
-		}
-		if a.Transport.Docker.Container == "" {
-			return nil, fmt.Errorf("docker transport requires a container name")
-		}
-		return &dockerTransport{cfg: a.Transport.Docker}, nil
+	Register("docker", Registration{
+		RequiredCLI: "docker",
+		Build: func(a *alias.Alias) (Transport, error) {
+			if a.Transport.Docker == nil {
+				return nil, fmt.Errorf("transport type docker requires a docker: block")
+			}
+			if a.Transport.Docker.Container == "" {
+				return nil, fmt.Errorf("docker transport requires a container name")
+			}
+			return &dockerTransport{cfg: a.Transport.Docker}, nil
+		},
 	})
 }
 

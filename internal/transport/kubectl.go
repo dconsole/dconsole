@@ -16,14 +16,17 @@ type kubectlTransport struct {
 }
 
 func init() {
-	Register("kubectl", func(a *alias.Alias) (Transport, error) {
-		if a.Transport.Kubectl == nil {
-			return nil, fmt.Errorf("transport type kubectl requires a kubectl: block")
-		}
-		if a.Transport.Kubectl.Resource == "" {
-			return nil, fmt.Errorf("kubectl transport requires resource (e.g. deployment/drupal or pods/foo)")
-		}
-		return &kubectlTransport{cfg: a.Transport.Kubectl}, nil
+	Register("kubectl", Registration{
+		RequiredCLI: "kubectl",
+		Build: func(a *alias.Alias) (Transport, error) {
+			if a.Transport.Kubectl == nil {
+				return nil, fmt.Errorf("transport type kubectl requires a kubectl: block")
+			}
+			if a.Transport.Kubectl.Resource == "" {
+				return nil, fmt.Errorf("kubectl transport requires resource (e.g. deployment/drupal or pods/foo)")
+			}
+			return &kubectlTransport{cfg: a.Transport.Kubectl}, nil
+		},
 	})
 }
 

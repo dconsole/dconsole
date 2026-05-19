@@ -17,14 +17,17 @@ type landoTransport struct {
 }
 
 func init() {
-	Register("lando", func(a *alias.Alias) (Transport, error) {
-		if a.Transport.Lando == nil {
-			return nil, fmt.Errorf("transport type lando requires a lando: block")
-		}
-		if a.Transport.Lando.AppDir == "" {
-			return nil, fmt.Errorf("lando transport requires app_dir (the Lando project root)")
-		}
-		return &landoTransport{cfg: a.Transport.Lando}, nil
+	Register("lando", Registration{
+		RequiredCLI: "lando",
+		Build: func(a *alias.Alias) (Transport, error) {
+			if a.Transport.Lando == nil {
+				return nil, fmt.Errorf("transport type lando requires a lando: block")
+			}
+			if a.Transport.Lando.AppDir == "" {
+				return nil, fmt.Errorf("lando transport requires app_dir (the Lando project root)")
+			}
+			return &landoTransport{cfg: a.Transport.Lando}, nil
+		},
 	})
 }
 

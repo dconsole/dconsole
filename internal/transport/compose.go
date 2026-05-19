@@ -16,14 +16,17 @@ type composeTransport struct {
 }
 
 func init() {
-	Register("compose", func(a *alias.Alias) (Transport, error) {
-		if a.Transport.Compose == nil {
-			return nil, fmt.Errorf("transport type compose requires a compose: block")
-		}
-		if a.Transport.Compose.Service == "" {
-			return nil, fmt.Errorf("compose transport requires service")
-		}
-		return &composeTransport{cfg: a.Transport.Compose}, nil
+	Register("compose", Registration{
+		RequiredCLI: "docker",
+		Build: func(a *alias.Alias) (Transport, error) {
+			if a.Transport.Compose == nil {
+				return nil, fmt.Errorf("transport type compose requires a compose: block")
+			}
+			if a.Transport.Compose.Service == "" {
+				return nil, fmt.Errorf("compose transport requires service")
+			}
+			return &composeTransport{cfg: a.Transport.Compose}, nil
+		},
 	})
 }
 

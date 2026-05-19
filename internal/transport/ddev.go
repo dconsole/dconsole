@@ -22,18 +22,21 @@ type ddevTransport struct {
 }
 
 func init() {
-	Register("ddev", func(a *alias.Alias) (Transport, error) {
-		if a.Transport.DDEV == nil {
-			return nil, fmt.Errorf("transport type ddev requires a ddev: block")
-		}
-		if a.Transport.DDEV.Project == "" {
-			return nil, fmt.Errorf("ddev transport requires project (the project name passed to `ddev describe`)")
-		}
-		approot, err := findDDEVApproot(a.Root)
-		if err != nil {
-			return nil, fmt.Errorf("ddev transport: %w", err)
-		}
-		return &ddevTransport{cfg: a.Transport.DDEV, approot: approot}, nil
+	Register("ddev", Registration{
+		RequiredCLI: "ddev",
+		Build: func(a *alias.Alias) (Transport, error) {
+			if a.Transport.DDEV == nil {
+				return nil, fmt.Errorf("transport type ddev requires a ddev: block")
+			}
+			if a.Transport.DDEV.Project == "" {
+				return nil, fmt.Errorf("ddev transport requires project (the project name passed to `ddev describe`)")
+			}
+			approot, err := findDDEVApproot(a.Root)
+			if err != nil {
+				return nil, fmt.Errorf("ddev transport: %w", err)
+			}
+			return &ddevTransport{cfg: a.Transport.DDEV, approot: approot}, nil
+		},
 	})
 }
 

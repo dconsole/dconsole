@@ -18,11 +18,14 @@ type sshTransport struct {
 }
 
 func init() {
-	Register("ssh", func(a *alias.Alias) (Transport, error) {
-		if a.Transport.SSH == nil {
-			return nil, fmt.Errorf("transport type ssh requires an ssh: block")
-		}
-		return &sshTransport{cfg: a.Transport.SSH}, nil
+	Register("ssh", Registration{
+		RequiredCLI: "ssh",
+		Build: func(a *alias.Alias) (Transport, error) {
+			if a.Transport.SSH == nil {
+				return nil, fmt.Errorf("transport type ssh requires an ssh: block")
+			}
+			return &sshTransport{cfg: a.Transport.SSH}, nil
+		},
 	})
 }
 

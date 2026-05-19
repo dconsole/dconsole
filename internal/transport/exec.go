@@ -19,13 +19,17 @@ type execTransport struct {
 }
 
 func init() {
-	Register("exec", func(a *alias.Alias) (Transport, error) {
-		// No required fields; the block may be omitted entirely.
-		cfg := a.Transport.Exec
-		if cfg == nil {
-			cfg = &alias.ExecTransport{}
-		}
-		return &execTransport{cfg: cfg}, nil
+	Register("exec", Registration{
+		// exec runs commands directly via os/exec.Command — no external CLI
+		// to depend on, so RequiredCLI is empty.
+		Build: func(a *alias.Alias) (Transport, error) {
+			// No required fields; the block may be omitted entirely.
+			cfg := a.Transport.Exec
+			if cfg == nil {
+				cfg = &alias.ExecTransport{}
+			}
+			return &execTransport{cfg: cfg}, nil
+		},
 	})
 }
 
