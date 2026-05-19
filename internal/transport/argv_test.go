@@ -2,6 +2,8 @@ package transport
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -91,11 +93,48 @@ func TestKubectlArgv(t *testing.T) {
 }
 
 func TestDDEVArgv(t *testing.T) {
-	d := &ddevTransport{cfg: &alias.DDEVTransport{Project: "example", Service: "web"}}
+	d := &ddevTransport{
+		cfg:     &alias.DDEVTransport{Project: "example", Service: "web"},
+		approot: "/path/to/example",
+	}
 	cmd := d.build(context.Background(), []string{"drush", "cr"})
-	want := []string{"ddev", "--project", "example", "exec", "-s", "web", "--", "drush", "cr"}
+	want := []string{"ddev", "exec", "-s", "web", "--", "drush", "cr"}
 	if !reflect.DeepEqual(cmd.Args, want) {
 		t.Errorf("ddev argv\n  got  %q\n  want %q", cmd.Args, want)
+	}
+	// ddev resolves the project from CWD; ensure Cmd.Dir is set so
+	// `ddev exec` targets the right project regardless of where dconsole
+	// was invoked.
+	if cmd.Dir != "/path/to/example" {
+		t.Errorf("ddev cmd.Dir = %q, want %q", cmd.Dir, "/path/to/example")
+	}
+}
+
+func TestDDEVApprootDiscovery(t *testing.T) {
+	dir := t.TempDir()
+	approot := filepath.Join(dir, "project")
+	if err := os.MkdirAll(filepath.Join(approot, ".ddev"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(approot, ".ddev", "config.yaml"), []byte("name: example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Pass the docroot (one level below approot), the way a typical
+	// alias.Root points into the project.
+	docroot := filepath.Join(approot, "web")
+	if err := os.MkdirAll(docroot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := findDDEVApproot(docroot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != approot {
+		t.Errorf("findDDEVApproot = %q, want %q", got, approot)
+	}
+
+	if _, err := findDDEVApproot(t.TempDir()); err == nil {
+		t.Error("expected error when no .ddev/config.yaml is found anywhere upstream")
 	}
 }
 
