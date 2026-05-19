@@ -13,6 +13,7 @@ import (
 
 	"github.com/heydon/dconsole/internal/alias"
 	"github.com/heydon/dconsole/internal/command"
+	"github.com/heydon/dconsole/internal/pluginmgr"
 	_ "github.com/heydon/dconsole/internal/provider" // register provider factories
 	"github.com/heydon/dconsole/internal/remotebin"
 	_ "github.com/heydon/dconsole/internal/transport" // register transport factories
@@ -76,6 +77,8 @@ func run(ctx context.Context, args []string) error {
 		return command.Inspect(ctx, loader, args[1:], os.Stdout)
 	case "project:init":
 		return command.ProjectInit(ctx, os.Stdout, os.Stdin, parseInitFlags(args[1:]))
+	case "plugin":
+		return runPlugin(args[1:], os.Stdout)
 	}
 
 	// Resolve the alias contextually: @site.env, @env (site from cwd),
@@ -143,6 +146,95 @@ func printResolution(w *os.File, a *alias.Alias) error {
 func runHelp(ctx context.Context, loader *alias.Loader) error {
 	a, _ := command.HelpContext(loader)
 	return command.Help(ctx, a, os.Stdout, printUsage)
+}
+
+// runPlugin dispatches `dconsole plugin <sub> [flags]`. Supports
+// install/remove/list/info/search; update is Phase 2.
+func runPlugin(args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: dconsole plugin <install|remove|list|info|search> [args]")
+	}
+	sub, rest := args[0], args[1:]
+	switch sub {
+	case "list":
+		return command.PluginList(out)
+	case "info":
+		if len(rest) != 1 {
+			return fmt.Errorf("usage: dconsole plugin info <name>")
+		}
+		return command.PluginInfo(rest[0], out)
+	case "remove", "uninstall":
+		if len(rest) != 1 {
+			return fmt.Errorf("usage: dconsole plugin remove <name>")
+		}
+		return command.PluginRemove(rest[0], out)
+	case "search":
+		query := ""
+		if len(rest) > 0 {
+			query = rest[0]
+		}
+		return command.PluginSearch(query, out)
+	case "install":
+		opts, err := parsePluginInstallFlags(rest)
+		if err != nil {
+			return err
+		}
+		return command.PluginInstall(opts, out)
+	case "update":
+		return fmt.Errorf("plugin update is not implemented yet — for now, re-run `plugin install <name>` to pull a newer version")
+	}
+	return fmt.Errorf("unknown plugin subcommand %q (want install, remove, list, info, search)", sub)
+}
+
+func parsePluginInstallFlags(args []string) (pluginmgr.InstallOpts, error) {
+	opts := pluginmgr.InstallOpts{}
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--path":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("--path requires a value")
+			}
+			opts.Path = args[i]
+		case strings.HasPrefix(a, "--path="):
+			opts.Path = strings.TrimPrefix(a, "--path=")
+		case a == "--url":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("--url requires a value")
+			}
+			opts.URL = args[i]
+		case strings.HasPrefix(a, "--url="):
+			opts.URL = strings.TrimPrefix(a, "--url=")
+		case a == "--sha256":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("--sha256 requires a value")
+			}
+			opts.SHA256 = args[i]
+		case strings.HasPrefix(a, "--sha256="):
+			opts.SHA256 = strings.TrimPrefix(a, "--sha256=")
+		case a == "--version":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("--version requires a value")
+			}
+			opts.Version = args[i]
+		case strings.HasPrefix(a, "--version="):
+			opts.Version = strings.TrimPrefix(a, "--version=")
+		default:
+			positional = append(positional, a)
+		}
+	}
+	if len(positional) > 1 {
+		return opts, fmt.Errorf("install takes at most one positional name (got %v)", positional)
+	}
+	if len(positional) == 1 {
+		opts.Name = positional[0]
+	}
+	return opts, nil
 }
 
 func parseInitFlags(args []string) command.InitOpts {
@@ -255,6 +347,11 @@ Usage:
   dconsole project:register                 # register the dconsole.yml at-or-above cwd
   dconsole project:list                     # list registered projects
   dconsole project:forget <name>            # remove a project from the registry
+  dconsole plugin install <name>            # install a transport/provider plugin (or --path=tgz, --url=… --sha256=…)
+  dconsole plugin list                      # show installed plugins
+  dconsole plugin info <name>               # show metadata for an installed plugin
+  dconsole plugin remove <name>             # uninstall a plugin
+  dconsole plugin search [query]            # search the curated plugin index
   dconsole inspect <invocation>             # print what dconsole would do (also aliased as debug, explain)
   dconsole @site.env dconsole:bin           # debug: show resolved bin/transport
   dconsole --version
