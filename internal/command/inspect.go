@@ -78,12 +78,39 @@ func Inspect(ctx context.Context, loader *alias.Loader, args []string, out io.Wr
 	case "sh", "ssh":
 		fmt.Fprintf(out, "  open interactive shell on @%s.%s (workDir=%s)\n", a.Site, a.Env, firstNonEmpty(rest, 1, a.Root))
 		return nil
-	case "login":
-		fmt.Fprintf(out, "  run login flow for transport=%s", a.Transport.Type)
+	case "auth":
+		fmt.Fprintf(out, "  run auth flow for transport=%s", a.Transport.Type)
 		if a.Provider.Type != "" {
 			fmt.Fprintf(out, " and provider=%s", a.Provider.Type)
 		}
 		fmt.Fprintln(out)
+		return nil
+	case "login":
+		drushArgs := []string{"user:login"}
+		if !hasURIArg(rest[1:]) {
+			if a.URI != "" {
+				drushArgs = append([]string{"--uri=" + a.URI}, drushArgs...)
+			} else {
+				fmt.Fprintln(out, "  ⚠ alias has no uri — drush will emit http://default/…")
+			}
+		}
+		drushArgs = append(drushArgs, rest[1:]...)
+		bin, ok := remotebin.Resolve(a)
+		if !ok {
+			fmt.Fprintf(out, "  drush user:login (bin: auto — would probe first)\n")
+			fmt.Fprintf(out, "  planned args: %s\n", quoteJoin(drushArgs))
+			fmt.Fprintf(out, "  then open the printed URL in the default browser\n")
+			return nil
+		}
+		t, err := transport.For(a)
+		if err != nil {
+			return fmt.Errorf("transport: %w", err)
+		}
+		remoteArgv := bin.Argv(drushArgs)
+		localArgv := t.Preview(remoteArgv)
+		fmt.Fprintf(out, "  drush user:login on @%s.%s, capture URL, open in browser\n", a.Site, a.Env)
+		fmt.Fprintf(out, "  remote argv: %s\n", quoteJoin(remoteArgv))
+		fmt.Fprintf(out, "  would run:   %s\n", quoteJoin(localArgv))
 		return nil
 	case "dconsole:bin":
 		fmt.Fprintln(out, "  built-in: print resolved bin/transport (no transport invocation)")
