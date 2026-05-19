@@ -22,17 +22,20 @@ type ironstar struct {
 }
 
 func init() {
-	Register("ironstar", func(a *alias.Alias) (Provider, error) {
-		if a.Provider.Ironstar == nil {
-			return nil, fmt.Errorf("provider type ironstar requires an ironstar: block")
-		}
-		if a.Provider.Ironstar.Subscription == "" {
-			return nil, fmt.Errorf("ironstar provider requires subscription")
-		}
-		if a.Provider.Ironstar.Environment == "" {
-			return nil, fmt.Errorf("ironstar provider requires environment")
-		}
-		return &ironstar{cfg: a.Provider.Ironstar, ironBin: "iron"}, nil
+	Register("ironstar", Registration{
+		RequiredCLI: "iron",
+		Build: func(a *alias.Alias) (Provider, error) {
+			if a.Provider.Ironstar == nil {
+				return nil, fmt.Errorf("provider type ironstar requires an ironstar: block")
+			}
+			if a.Provider.Ironstar.Subscription == "" {
+				return nil, fmt.Errorf("ironstar provider requires subscription")
+			}
+			if a.Provider.Ironstar.Environment == "" {
+				return nil, fmt.Errorf("ironstar provider requires environment")
+			}
+			return &ironstar{cfg: a.Provider.Ironstar, ironBin: "iron"}, nil
+		},
 	})
 }
 
