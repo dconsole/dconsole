@@ -208,6 +208,28 @@ type LandoTransport struct {
 	Service string `yaml:"service,omitempty"`
 }
 
+// AhoyTransport runs commands via the `ahoy` CLI, which reads tasks
+// from a `.ahoy.yml` at or above the working directory. Common in
+// Drupal dev environments as a thin abstraction over ddev / lando /
+// docker-compose.
+//
+// dconsole rewrites a remote command like `[drush, sql:dump]` to
+// `ahoy <task> sql:dump` — the task name defaults to the basename of
+// the resolved bin (typically "drush" or "drupal") so the user just
+// needs to define `drush:` / `drupal:` tasks in their .ahoy.yml.
+type AhoyTransport struct {
+	// Dir is the directory dconsole runs `ahoy` from. ahoy walks up
+	// from this directory looking for .ahoy.yml. Defaults to alias.Root
+	// when unset; if .ahoy.yml isn't reachable from either, transport
+	// construction fails with a clear error.
+	Dir string `yaml:"dir,omitempty"`
+
+	// Task overrides the ahoy task name. When empty, dconsole uses the
+	// basename of the resolved bin path (so `bin.kind=drush` →
+	// `ahoy drush`).
+	Task string `yaml:"task,omitempty"`
+}
+
 // Provider attaches a hosting-provider plugin to an alias. dconsole
 // ships with no in-tree providers — every implementation arrives as a
 // subprocess plugin. Plugin factories decode their YAML block via

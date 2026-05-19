@@ -110,6 +110,69 @@ func TestDDEVArgv(t *testing.T) {
 	}
 }
 
+func TestAhoyArgv(t *testing.T) {
+	cases := []struct {
+		name      string
+		cfg       alias.AhoyTransport
+		remoteCmd []string
+		wantArgs  []string
+	}{
+		{
+			name:      "defaults task to bin basename",
+			cfg:       alias.AhoyTransport{},
+			remoteCmd: []string{"drush", "sql:dump", "--gzip"},
+			wantArgs:  []string{"ahoy", "drush", "sql:dump", "--gzip"},
+		},
+		{
+			name:      "explicit task overrides basename",
+			cfg:       alias.AhoyTransport{Task: "d"},
+			remoteCmd: []string{"/vendor/bin/drush", "status"},
+			wantArgs:  []string{"ahoy", "d", "status"},
+		},
+		{
+			name:      "absolute bin path uses just the basename",
+			cfg:       alias.AhoyTransport{},
+			remoteCmd: []string{"/var/www/vendor/bin/drupal", "cache:rebuild"},
+			wantArgs:  []string{"ahoy", "drupal", "cache:rebuild"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := &ahoyTransport{cfg: c.cfg, workDir: "/some/project"}
+			got := h.build(context.Background(), c.remoteCmd)
+			if !reflect.DeepEqual(got.Args, c.wantArgs) {
+				t.Errorf("argv\n  got  %q\n  want %q", got.Args, c.wantArgs)
+			}
+			if got.Dir != "/some/project" {
+				t.Errorf("Dir = %q, want /some/project", got.Dir)
+			}
+		})
+	}
+}
+
+func TestAhoyDirDiscovery(t *testing.T) {
+	dir := t.TempDir()
+	project := filepath.Join(dir, "myapp")
+	if err := os.MkdirAll(filepath.Join(project, "web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".ahoy.yml"), []byte("ahoyapi: v2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Start from the docroot — should walk up one level to the project.
+	got, err := findAhoyDir(filepath.Join(project, "web"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != project {
+		t.Errorf("findAhoyDir = %q, want %q", got, project)
+	}
+	// No .ahoy.yml at or above an unrelated dir → error.
+	if _, err := findAhoyDir(t.TempDir()); err == nil {
+		t.Error("expected error when no .ahoy.yml is reachable")
+	}
+}
+
 func TestDDEVApprootDiscovery(t *testing.T) {
 	dir := t.TempDir()
 	approot := filepath.Join(dir, "project")
@@ -151,7 +214,7 @@ func TestLandoArgv(t *testing.T) {
 }
 
 func TestTransportRegistryHasAll(t *testing.T) {
-	want := []string{"ssh", "docker", "compose", "kubectl", "ddev", "lando"}
+	want := []string{"ssh", "docker", "compose", "kubectl", "ddev", "lando", "ahoy", "exec"}
 	have := strings.Join(Names(), ",")
 	for _, name := range want {
 		if !strings.Contains(have, name) {
