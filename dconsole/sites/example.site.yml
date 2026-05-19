@@ -1,0 +1,77 @@
+_defaults:
+  root: /var/www/html
+  bin: { kind: drush }
+
+dev:
+  uri: https://dev.example.com
+  transport:
+    type: ssh
+    ssh:
+      host: dev.example.com
+      user: deploy
+      port: 22
+
+stage:
+  uri: https://stage.example.com
+  bin: { kind: drupal, path: /app/vendor/bin/drupal }
+  transport:
+    type: ssh
+    ssh: { host: stage.example.com, user: deploy }
+
+docker:
+  uri: http://localhost
+  transport:
+    type: docker
+    docker:
+      container: example-php
+      user: www-data
+  # Old-client pattern: a sidecar container ships the latest dump at a known
+  # path. dconsole pulls it via `docker cp` instead of running drush inside.
+  sql:
+    source:
+      type: docker_cp
+      container: example-db-backup
+      path: /backups/latest.sql.gz
+      gzipped: true
+
+# Fetching a pre-made dump file via the alias's transport (no docker cp needed).
+docker_file:
+  uri: http://localhost
+  transport:
+    type: docker
+    docker: { container: example-php, user: www-data }
+  sql:
+    source:
+      type: file
+      path: /var/backups/db/latest.sql.gz
+
+compose:
+  uri: http://localhost
+  transport:
+    type: compose
+    compose:
+      project_dir: /Users/gordon/Source/example
+      service: php
+      exec_options: ['--user', 'www-data']
+
+k8s:
+  uri: https://k8s.example.com
+  transport:
+    type: kubectl
+    kubectl:
+      namespace: drupal-prod
+      resource: deployment/drupal
+      container: php
+
+local:
+  uri: https://example.ddev.site
+  bin: { kind: drupal, path: vendor/bin/drupal }
+  transport:
+    type: ddev
+    ddev: { project: example }
+
+lando:
+  uri: https://example.lndo.site
+  transport:
+    type: lando
+    lando: { app_dir: /Users/gordon/Source/example, service: appserver }

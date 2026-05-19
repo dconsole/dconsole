@@ -1,0 +1,13 @@
+# Built binary (output of `go build -o dconsole ./cmd/dconsole`)
+/dconsole/dconsole
+
+# JetBrains IDE
+.idea/
+
+# macOS
+.DS_Store
+
+# Go build/test artifacts
+*.test
+*.out
+coverage.txt
