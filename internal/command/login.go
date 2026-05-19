@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"strings"
 
 	"github.com/heydon/dconsole/internal/alias"
 	"github.com/heydon/dconsole/internal/transport"
@@ -29,7 +30,20 @@ func Login(ctx context.Context, a *alias.Alias, args []string, out io.Writer) er
 		return err
 	}
 
-	cmd := bin.Argv(append([]string{"user:login"}, args...))
+	// Drush needs --uri to know which URL to embed in the one-time-login
+	// link; without it, drush falls back to http://default/… which fails
+	// in the browser. Prepend it as a global option unless the caller
+	// already passed their own --uri.
+	drushArgs := []string{"user:login"}
+	if !hasURIArg(args) {
+		if a.URI != "" {
+			drushArgs = append([]string{"--uri=" + a.URI}, drushArgs...)
+		} else {
+			fmt.Fprintf(out, "warning: @%s.%s has no uri configured; drush will emit http://default/…\n", a.Site, a.Env)
+		}
+	}
+	drushArgs = append(drushArgs, args...)
+	cmd := bin.Argv(drushArgs)
 	var stdout, stderr bytes.Buffer
 	pipeErr := t.Pipe(ctx, cmd, nil, &stdout)
 
@@ -51,6 +65,17 @@ func Login(ctx context.Context, a *alias.Alias, args []string, out io.Writer) er
 		return fmt.Errorf("open browser: %w", err)
 	}
 	return nil
+}
+
+// hasURIArg reports whether the caller already supplied a --uri flag,
+// so we don't override their explicit choice.
+func hasURIArg(args []string) bool {
+	for _, a := range args {
+		if a == "--uri" || a == "-l" || strings.HasPrefix(a, "--uri=") || strings.HasPrefix(a, "-l=") {
+			return true
+		}
+	}
+	return false
 }
 
 // loginURLRE matches a URL in drush user:login output. Drush prints the

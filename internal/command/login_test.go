@@ -141,6 +141,108 @@ func TestLogin_ForwardsExtraArgs(t *testing.T) {
 	}
 }
 
+// TestLogin_InjectsAliasURI ensures dconsole passes the alias's URI to
+// drush as a global --uri= flag so drush doesn't emit http://default/…
+func TestLogin_InjectsAliasURI(t *testing.T) {
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args")
+
+	fakeBin := filepath.Join(dir, "fake-drush")
+	script := "#!/bin/sh\n" +
+		`echo "$@" > ` + argsFile + "\n" +
+		`echo "https://app.example.com/user/reset/1/abc/login"` + "\n"
+	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	restore := stubOpenBrowser(func(string) error { return nil })
+	defer restore()
+
+	a := &alias.Alias{
+		Site: "ex", Env: "dev",
+		URI:       "https://app.example.com",
+		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
+		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+	}
+	t.Setenv("HOME", t.TempDir())
+
+	if err := Login(context.Background(), a, nil, &bytes.Buffer{}); err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	got, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "--uri=https://app.example.com user:login\n"
+	if string(got) != want {
+		t.Errorf("drush called with %q, want %q", string(got), want)
+	}
+}
+
+// TestLogin_UserURIWins confirms a caller-supplied --uri is preserved
+// and dconsole does not add its own (no duplicate flags).
+func TestLogin_UserURIWins(t *testing.T) {
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args")
+	fakeBin := filepath.Join(dir, "fake-drush")
+	script := "#!/bin/sh\n" +
+		`echo "$@" > ` + argsFile + "\n" +
+		`echo "https://override.example.com/user/reset/1/abc/login"` + "\n"
+	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	restore := stubOpenBrowser(func(string) error { return nil })
+	defer restore()
+
+	a := &alias.Alias{
+		Site: "ex", Env: "dev",
+		URI:       "https://app.example.com",
+		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
+		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+	}
+	t.Setenv("HOME", t.TempDir())
+
+	if err := Login(context.Background(), a, []string{"--uri=https://override.example.com"}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	got, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "user:login --uri=https://override.example.com\n"
+	if string(got) != want {
+		t.Errorf("drush called with %q, want %q", string(got), want)
+	}
+}
+
+// TestLogin_NoURIWarns confirms we proceed but emit a warning when the
+// alias has no URI configured.
+func TestLogin_NoURIWarns(t *testing.T) {
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "fake-drush")
+	script := "#!/bin/sh\n" +
+		`echo "http://default/user/reset/1/abc/login"` + "\n"
+	if err := os.WriteFile(fakeBin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	restore := stubOpenBrowser(func(string) error { return nil })
+	defer restore()
+
+	a := &alias.Alias{
+		Site: "ex", Env: "dev",
+		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
+		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+	}
+	t.Setenv("HOME", t.TempDir())
+
+	var out bytes.Buffer
+	if err := Login(context.Background(), a, nil, &out); err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if !strings.Contains(out.String(), "no uri configured") {
+		t.Errorf("expected URI warning; got:\n%s", out.String())
+	}
+}
+
 func stubOpenBrowser(fn func(string) error) func() {
 	prev := openBrowser
 	openBrowser = fn
