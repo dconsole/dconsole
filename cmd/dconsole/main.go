@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -34,23 +35,21 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) error {
+	loader := alias.NewLoader()
+	command.WireProjectResolution(loader)
+
 	if len(args) == 0 {
-		printUsage(os.Stdout)
-		return nil
+		return runHelp(ctx, loader)
 	}
 
 	// Top-level flags dconsole owns (anything before the @alias).
 	switch args[0] {
 	case "-h", "--help", "help":
-		printUsage(os.Stdout)
-		return nil
+		return runHelp(ctx, loader)
 	case "-V", "--version", "version":
 		fmt.Println("dconsole", version)
 		return nil
 	}
-
-	loader := alias.NewLoader()
-	command.WireProjectResolution(loader)
 
 	// Built-in commands that don't need an alias.
 	switch args[0] {
@@ -136,6 +135,14 @@ func printResolution(w *os.File, a *alias.Alias) error {
 		fmt.Fprintf(w, "provider:  %s\n", a.Provider.Type)
 	}
 	return nil
+}
+
+// runHelp prints dconsole's help. If a project context is available, it
+// merges drush's `list --format=json` output into the rendering so users
+// see remote commands alongside dconsole built-ins.
+func runHelp(ctx context.Context, loader *alias.Loader) error {
+	a, _ := command.HelpContext(loader)
+	return command.Help(ctx, a, os.Stdout, printUsage)
 }
 
 func parseInitFlags(args []string) command.InitOpts {
@@ -228,7 +235,7 @@ func runSqlSync(ctx context.Context, loader *alias.Loader, args []string) error 
 	return command.SqlSync(ctx, source, target, os.Stdout, opts)
 }
 
-func printUsage(w *os.File) {
+func printUsage(w io.Writer) {
 	fmt.Fprintln(w, strings.TrimSpace(`
 dconsole — a transport-agnostic Drush/Drupal CLI client.
 
