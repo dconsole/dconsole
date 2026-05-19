@@ -97,7 +97,7 @@ The file contains an `AliasEnvelope`:
 ```
 
 `config` is the raw transport mapping from the YAML — your plugin's
-own block lives nested under its type key (`skpr`/`ironstar`/…), and
+own block lives nested under its type key (`skpr`/`fake`/…), and
 you decode just that part. `provider` is the symmetric provider
 mapping. Both fields are optional.
 

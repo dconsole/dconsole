@@ -1,7 +1,8 @@
-// Package provider hosts the registry for in-tree providers. The public
+// Package provider hosts the registry shim for providers. The public
 // extension API lives in github.com/heydon/dconsole/pkg/provider; this
 // package re-exports the symbols other dconsole packages already import
-// here, plus the init() registrations for built-in providers (ironstar).
+// here. There are no in-tree provider implementations — every provider
+// arrives as a subprocess plugin via internal/provider/subprocess.go.
 package provider
 
 import (

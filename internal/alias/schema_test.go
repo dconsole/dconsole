@@ -105,9 +105,6 @@ skpr:
 	if p.Type != "skpr" {
 		t.Errorf("Type = %q, want skpr", p.Type)
 	}
-	if p.Ironstar != nil {
-		t.Errorf("Ironstar should be nil for unknown type")
-	}
 	type wrapper struct {
 		Skpr struct {
 			APIToken string `yaml:"api_token"`

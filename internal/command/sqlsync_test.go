@@ -101,42 +101,23 @@ func TestSqlSyncRejectsNonGzip(t *testing.T) {
 	}
 }
 
-// TestSqlSyncFromProvider verifies the headline workflow: source has an
-// ironstar provider that pre-fetches a backup, target uses the regular
-// transport+drush path. No live drush sql:dump on source.
+// TestSqlSyncFromProvider verifies the headline workflow: source has a
+// provider that pre-fetches a backup, target uses the regular
+// transport+drush path. Uses the test-only `fake` provider that just
+// reports a pre-baked dump path — exactly what a real provider plugin
+// would do — so we don't need any third-party hosting CLI to run this.
 func TestSqlSyncFromProvider(t *testing.T) {
 	dir := t.TempDir()
 	const dumpBody = "CREATE TABLE t(id INT); INSERT INTO t VALUES (42);"
 
-	// Fake `iron` binary that responds to backup download by writing a
-	// gzipped SQL file into --save-path. The real CLI does the same.
-	fakeIron := filepath.Join(dir, "iron-fake")
-	writeScript(t, fakeIron, `#!/bin/sh
-save=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --save-path) save="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
-[ -n "$save" ] || { echo "no --save-path" >&2; exit 2; }
-mkdir -p "$save"
-printf '`+dumpBody+`' | gzip > "$save/database-default.sql.gz"
-`)
+	// Pre-create a gzipped SQL dump at a known path. The fake provider's
+	// DumpFor just returns this path; sql:sync's loader gunzips and
+	// pipes into the target's drush sql:cli.
+	dumpPath := filepath.Join(dir, "dump.sql.gz")
+	writeGzipped(t, dumpPath, dumpBody)
 
-	// Override the ironstar ironBin via the package's registration is
-	// awkward; instead use the existing ironstar registry but ensure the
-	// fake binary is on PATH for this test. The provider hardcodes
-	// "iron" — we tweak PATH so the fake wins.
-	origPath := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
-	t.Setenv("PATH", dir+":"+origPath)
-	// Symlink iron-fake → iron so the provider's exec.Command("iron", …) finds it.
-	if err := os.Symlink(fakeIron, filepath.Join(dir, "iron")); err != nil {
-		t.Fatal(err)
-	}
-
-	// Fake target drush that writes incoming stdin to a known file under sql:cli.
+	// Fake target drush that writes incoming stdin to a known file
+	// under sql:cli, so we can assert the dump made it across.
 	importedFile := filepath.Join(dir, "imported.sql")
 	fakeDrush := filepath.Join(dir, "fake-drush")
 	writeScript(t, fakeDrush, `#!/bin/sh
@@ -148,9 +129,8 @@ esac
 
 	source := &alias.Alias{
 		Site: "ex", Env: "prod",
-		Provider: alias.NewProvider("ironstar", alias.IronstarProvider{
-			Subscription: "example-prod",
-			Environment:  "production",
+		Provider: alias.NewProvider("fake", fakeProviderConfig{
+			DumpPath: dumpPath,
 		}),
 		// Transport is still required structurally but won't be used
 		// because the provider supplies the dump.
@@ -158,8 +138,8 @@ esac
 	}
 	target := &alias.Alias{
 		Site: "ex", Env: "local",
-		Bin: alias.RemoteBin{Kind: "drush", Path: fakeDrush},
-		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
+		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeDrush},
+		Transport: alias.NewTransport("exec", nil),
 	}
 
 	var out bytes.Buffer
@@ -174,7 +154,7 @@ esac
 	if string(got) != dumpBody {
 		t.Errorf("imported body = %q, want %q", string(got), dumpBody)
 	}
-	if !bytes.Contains(out.Bytes(), []byte("via provider ironstar")) {
+	if !bytes.Contains(out.Bytes(), []byte("via provider fake")) {
 		t.Errorf("output should mention provider; got:\n%s", out.String())
 	}
 }

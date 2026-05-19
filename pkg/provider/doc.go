@@ -1,6 +1,6 @@
 // Package provider is the public extension API for dconsole providers.
 //
-// A provider integrates a hosting service (Ironstar, Pantheon, Acquia,
+// A provider integrates a hosting service (Skpr, Pantheon, Acquia,
 // Platform.sh, …) whose preferred data-movement story differs from the
 // generic "drush sql:dump on source" approach — they typically offer
 // pre-computed backups via their own CLI or API.

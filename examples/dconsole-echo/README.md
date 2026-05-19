@@ -11,8 +11,7 @@ stdout.
 - **Integration-test fixture.** dconsole's own subprocess-runner tests
   build this binary and exercise every verb against it.
 - **Reference implementation.** Copy `main.go` as a starting point when
-  you're writing your own plugin (e.g. `dconsole-skpr`,
-  `dconsole-ironstar`).
+  you're writing your own plugin (e.g. `dconsole-skpr`).
 - **Smoke test.** Drop it into `~/.dconsole/plugins/`, give dconsole an
   alias with `transport: { type: echo }`, and run any command — the
   plugin's stderr shows the verb and the alias envelope dconsole built.

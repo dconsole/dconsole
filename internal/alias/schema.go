@@ -208,14 +208,15 @@ type LandoTransport struct {
 	Service string `yaml:"service,omitempty"`
 }
 
-// Provider attaches a hosting-provider plugin to an alias. Mirrors
-// Transport: typed in-tree blocks (Ironstar, …) decode automatically;
-// plugin providers access the raw YAML via Raw + Decode().
+// Provider attaches a hosting-provider plugin to an alias. dconsole
+// ships with no in-tree providers — every implementation arrives as a
+// subprocess plugin. Plugin factories decode their YAML block via
+// Raw + Decode().
 type Provider struct {
-	Type     string            `yaml:"type"`
-	Ironstar *IronstarProvider `yaml:"ironstar,omitempty"`
+	Type string `yaml:"type"`
 
-	// Raw captures the YAML mapping for plugin providers to decode.
+	// Raw captures the YAML mapping so the plugin's Build function can
+	// pull its typed config out via Decode(&cfg).
 	Raw yaml.Node `yaml:"-"`
 }
 
@@ -255,7 +256,3 @@ func NewProvider(typ string, cfg any) Provider {
 	return p
 }
 
-type IronstarProvider struct {
-	Subscription string `yaml:"subscription"`
-	Environment  string `yaml:"environment"`
-}
