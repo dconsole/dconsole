@@ -11,3 +11,6 @@
 *.test
 *.out
 coverage.txt
+
+# Goreleaser snapshot output
+/dist/

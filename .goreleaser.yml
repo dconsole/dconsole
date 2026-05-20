@@ -1,0 +1,136 @@
+# goreleaser config — cuts cross-platform binaries on every `git tag vX.Y.Z`
+# push via .github/workflows/release.yml. Run locally with:
+#   goreleaser release --snapshot --clean
+# (snapshot mode skips the actual GitHub publish.)
+
+version: 2
+
+project_name: dconsole
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # dconsole — the main CLI.
+  - id: dconsole
+    main: ./cmd/dconsole
+    binary: dconsole
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64  # uncommon; skip until someone asks
+
+  # dconsole-echo — the reference plugin. Built and shipped alongside
+  # so users can test the plugin system end-to-end without compiling
+  # from source.
+  - id: dconsole-echo
+    main: ./examples/dconsole-echo
+    binary: dconsole-echo
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  # One archive per binary per platform — easier to consume than a
+  # single bundled archive (users typically want just dconsole; the
+  # echo plugin is opt-in).
+  - id: dconsole
+    ids: [dconsole]
+    name_template: >-
+      dconsole_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README*
+      - LICENSE*
+      - docs/**/*
+
+  - id: dconsole-echo
+    ids: [dconsole-echo]
+    name_template: >-
+      dconsole-echo_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - examples/dconsole-echo/README*
+      - examples/dconsole-echo/echo.site.yml.example
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: New features
+      regexp: '^.*?(feat|add)(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?(fix|bug)(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Other
+      order: 99
+
+release:
+  github:
+    owner: heydon-consulting
+    name: dconsole
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+  header: |
+    ## dconsole {{.Tag}}
+
+    Cross-platform binaries for darwin/linux/windows on amd64/arm64.
+
+    ### Install
+
+    Download the archive for your OS+arch, extract `dconsole` into a directory on `$PATH`, e.g.:
+
+    ```sh
+    tar -xzf dconsole_{{.Version}}_darwin_arm64.tar.gz
+    mv dconsole ~/.local/bin/
+    ```
+
+    Verify with `dconsole --version`.
+
+    The `dconsole-echo` archive is the reference plugin used to demo the plugin system — install only if you're poking at plugin development.
+
+  footer: |
+    **Full Changelog**: https://github.com/heydon-consulting/dconsole/compare/{{.PreviousTag}}...{{.Tag}}

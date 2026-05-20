@@ -21,7 +21,10 @@ import (
 	_ "github.com/heydon/dconsole/internal/transport" // register transport factories
 )
 
-const version = "0.1.0-dev"
+// version is overridden by goreleaser via `-X main.version={{.Version}}`
+// at release-build time. `go build` straight from source leaves it as
+// "dev".
+var version = "dev"
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
