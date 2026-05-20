@@ -10,17 +10,33 @@ type AliasFile map[string]Alias
 // Alias is one environment within a site file. After resolution it also
 // carries the site name and env name it was looked up under.
 type Alias struct {
-	URI       string    `yaml:"uri,omitempty"`
-	Root      string    `yaml:"root,omitempty"`
-	Bin       RemoteBin `yaml:"bin,omitempty"`
-	Transport Transport `yaml:"transport,omitempty"`
-	Provider  Provider  `yaml:"provider,omitempty"`
-	SQL       SQL       `yaml:"sql,omitempty"`
-	Policy    Policy    `yaml:"policy,omitempty"`
+	URI       string            `yaml:"uri,omitempty"`
+	Root      string            `yaml:"root,omitempty"`
+	Bin       RemoteBin         `yaml:"bin,omitempty"`
+	Transport Transport         `yaml:"transport,omitempty"`
+	Provider  Provider          `yaml:"provider,omitempty"`
+	SQL       SQL               `yaml:"sql,omitempty"`
+	Assets    Assets            `yaml:"assets,omitempty"`
+	Policy    Policy            `yaml:"policy,omitempty"`
 	EnvVars   map[string]string `yaml:"env_vars,omitempty"`
 
 	Site string `yaml:"-"`
 	Env  string `yaml:"-"`
+}
+
+// Assets configures `dconsole rsync` behaviour for the alias's files
+// directories (sites/default/files, the private dir, …). The cache TTL
+// only applies to the provider-FilesDownload path; rsync/diff modes
+// are inherently fresh per run.
+type Assets struct {
+	Cache AssetsCacheConfig `yaml:"cache,omitempty"`
+}
+
+type AssetsCacheConfig struct {
+	// TTL is how long a cached provider-supplied asset bundle stays
+	// fresh. Go duration string ("6h", "30m"). Empty falls back to
+	// the assetscache default of 24h.
+	TTL string `yaml:"ttl,omitempty"`
 }
 
 // Policy controls which other envs may sync with this one. Default is
