@@ -15,6 +15,7 @@ import (
 
 	"github.com/heydon/dconsole/internal/alias"
 	"github.com/heydon/dconsole/internal/dbcache"
+	"github.com/heydon/dconsole/internal/dlog"
 	"github.com/heydon/dconsole/internal/provider"
 	"github.com/heydon/dconsole/internal/remotebin"
 	pkgtransport "github.com/heydon/dconsole/pkg/transport"
@@ -339,6 +340,7 @@ func obtainDumpFile(ctx context.Context, source *alias.Alias, out io.Writer, opt
 	if src.SourceGzipped() {
 		remoteCmd = []string{"cat", src.Path}
 	}
+	dlog.Cmdf(sourceT.Preview(remoteCmd))
 	if err := sourceT.Pipe(ctx, remoteCmd, nil, f); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("fetch %s via %s: %w", src.Path, sourceT.Name(), err)
@@ -497,7 +499,9 @@ func dumpToFile(ctx context.Context, t transport.Transport, bin *remotebin.Resol
 	if st := effectiveStructureTables(source, opts); len(st) > 0 {
 		args = append(args, "--structure-tables-list="+strings.Join(st, ","))
 	}
+	args = append(args, dlog.DrushFlags()...)
 	cmd := bin.Argv(args)
+	dlog.Cmdf(t.Preview(cmd))
 	return t.Pipe(ctx, cmd, nil, f)
 }
 
@@ -518,6 +522,8 @@ func importFromFile(ctx context.Context, t transport.Transport, bin *remotebin.R
 	if db := effectiveTargetDatabase(target, opts); db != "" && db != "default" {
 		args = append(args, "--database="+db)
 	}
+	args = append(args, dlog.DrushFlags()...)
 	cmd := bin.Argv(args)
+	dlog.Cmdf(t.Preview(cmd))
 	return t.Pipe(ctx, cmd, gz, io.Discard)
 }

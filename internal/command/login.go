@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/heydon/dconsole/internal/alias"
+	"github.com/heydon/dconsole/internal/dlog"
 	"github.com/heydon/dconsole/internal/transport"
 )
 
@@ -43,7 +44,9 @@ func Login(ctx context.Context, a *alias.Alias, args []string, out io.Writer) er
 		}
 	}
 	drushArgs = append(drushArgs, args...)
+	drushArgs = append(drushArgs, dlog.DrushFlags()...)
 	cmd := bin.Argv(drushArgs)
+	dlog.Cmdf(t.Preview(cmd))
 	var stdout, stderr bytes.Buffer
 	pipeErr := t.Pipe(ctx, cmd, nil, &stdout)
 

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/heydon/dconsole/internal/alias"
+	"github.com/heydon/dconsole/internal/dlog"
 	"github.com/heydon/dconsole/internal/transport"
 )
 
@@ -112,6 +113,7 @@ func Help(ctx context.Context, a *alias.Alias, out io.Writer, fallback func(io.W
 	// Try drush 9+ first: list --format=json.
 	var stdout bytes.Buffer
 	cmd := bin.Argv([]string{"list", "--format=json"})
+	dlog.Cmdf(t.Preview(cmd))
 	jsonErr := t.Pipe(ctx, cmd, nil, &stdout)
 	if jsonErr == nil {
 		if help, ok := tryJSON(stdout.Bytes()); ok {
@@ -126,6 +128,7 @@ func Help(ctx context.Context, a *alias.Alias, out io.Writer, fallback func(io.W
 	// Drush 8 fallback: parse `drush help` plain text.
 	stdout.Reset()
 	cmd = bin.Argv([]string{"help"})
+	dlog.Cmdf(t.Preview(cmd))
 	if err := t.Pipe(ctx, cmd, nil, &stdout); err != nil {
 		helpDebug("drush help (plain text) failed: %v", err)
 		fmt.Fprintf(out, "Note: couldn't reach drush on @%s.%s (neither JSON nor plain-text help). Showing dconsole built-ins only.\n\n", a.Site, a.Env)

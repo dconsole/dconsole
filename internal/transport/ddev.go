@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/heydon/dconsole/internal/alias"
+	"github.com/heydon/dconsole/internal/dlog"
 	"github.com/heydon/dconsole/internal/run"
 )
 
@@ -96,6 +97,7 @@ func (d *ddevTransport) ImportDB(ctx context.Context, a *alias.Alias, dumpPath s
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	dlog.Cmdf(cmd.Args)
 	return cmd.Run()
 }
 

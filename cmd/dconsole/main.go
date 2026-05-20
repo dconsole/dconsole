@@ -14,6 +14,7 @@ import (
 
 	"github.com/heydon/dconsole/internal/alias"
 	"github.com/heydon/dconsole/internal/command"
+	"github.com/heydon/dconsole/internal/dlog"
 	"github.com/heydon/dconsole/internal/pluginmgr"
 	_ "github.com/heydon/dconsole/internal/provider" // register provider factories
 	"github.com/heydon/dconsole/internal/remotebin"
@@ -37,6 +38,12 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) error {
+	// Extract -v / -vv / -vvv from the front of args so they work as a
+	// top-level dconsole verbosity flag. The matching flag is appended
+	// to any drush invocation we spawn (see dlog.DrushFlags).
+	args, vlvl := dlog.ExtractFromArgs(args)
+	dlog.SetLevel(vlvl)
+
 	loader := alias.NewLoader()
 	command.WireProjectResolution(loader)
 
@@ -474,6 +481,13 @@ Usage:
   dconsole inspect <invocation>             # print what dconsole would do (also aliased as debug, explain)
   dconsole @site.env dconsole:bin           # debug: show resolved bin/transport
   dconsole --version
+
+Global flags (parsed before the alias / subcommand):
+  -v, --verbose      log each remote command dconsole spawns + append -v to drush
+  -vv                log + append -vv to drush
+  -vvv, --debug      log + append -vvv to drush
+  Note: a -v typed AFTER the subcommand is passed through unchanged
+        (drush still sees it), but dconsole stays quiet.
 
 Aliases come from (in priority order):
   $PWD/dconsole/sites/*.site.yml

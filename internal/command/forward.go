@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/heydon/dconsole/internal/alias"
+	"github.com/heydon/dconsole/internal/dlog"
 	"github.com/heydon/dconsole/internal/remotebin"
 	"github.com/heydon/dconsole/internal/run"
 	"github.com/heydon/dconsole/internal/transport"
@@ -25,7 +26,28 @@ func Forward(ctx context.Context, a *alias.Alias, args []string) error {
 	if err != nil {
 		return err
 	}
-	return t.Exec(ctx, bin.Argv(args), run.DefaultStdio())
+	args = appendDrushFlags(args)
+	cmd := bin.Argv(args)
+	dlog.Cmdf(t.Preview(cmd))
+	return t.Exec(ctx, cmd, run.DefaultStdio())
+}
+
+// appendDrushFlags adds -v/-vv/-vvv to args if dlog is active AND the
+// user hasn't already typed an explicit verbose flag of their own. The
+// check is intentionally trivial — duplicates like "drush -v cr -v" are
+// harmless to drush, so we just avoid the obvious overlap.
+func appendDrushFlags(args []string) []string {
+	flags := dlog.DrushFlags()
+	if len(flags) == 0 {
+		return args
+	}
+	for _, a := range args {
+		switch a {
+		case "-v", "-vv", "-vvv", "--verbose", "--debug":
+			return args
+		}
+	}
+	return append(args, flags...)
 }
 
 // resolveBin returns the concrete RemoteBin for an alias, auto-probing if
