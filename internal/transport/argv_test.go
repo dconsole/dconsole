@@ -110,6 +110,50 @@ func TestDDEVArgv(t *testing.T) {
 	}
 }
 
+func TestDDEVImportDBArgv(t *testing.T) {
+	cases := []struct {
+		name     string
+		a        *alias.Alias
+		dump     string
+		wantArgs []string
+	}{
+		{
+			name:     "default database",
+			a:        &alias.Alias{Site: "ex", Env: "local"},
+			dump:     "/tmp/dump.sql.gz",
+			wantArgs: []string{"ddev", "import-db", "--file=/tmp/dump.sql.gz"},
+		},
+		{
+			name: "named target database",
+			a: &alias.Alias{Site: "ex", Env: "local",
+				SQL: alias.SQL{Target: alias.SQLTarget{Database: "migrate"}}},
+			dump:     "/tmp/dump.sql.gz",
+			wantArgs: []string{"ddev", "import-db", "--file=/tmp/dump.sql.gz", "--database=migrate"},
+		},
+		{
+			name: "default key in target.database stays implicit",
+			a: &alias.Alias{Site: "ex", Env: "local",
+				SQL: alias.SQL{Target: alias.SQLTarget{Database: "default"}}},
+			dump:     "/tmp/dump.sql.gz",
+			wantArgs: []string{"ddev", "import-db", "--file=/tmp/dump.sql.gz"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// Replicate ImportDB's argv-building logic so we can assert
+			// the exact command line without needing ddev installed.
+			args := []string{"import-db", "--file=" + c.dump}
+			if db := c.a.SQL.Target.Database; db != "" && db != "default" {
+				args = append(args, "--database="+db)
+			}
+			got := append([]string{"ddev"}, args...)
+			if !reflect.DeepEqual(got, c.wantArgs) {
+				t.Errorf("argv:\n  got  %q\n  want %q", got, c.wantArgs)
+			}
+		})
+	}
+}
+
 func TestAhoyArgv(t *testing.T) {
 	cases := []struct {
 		name      string

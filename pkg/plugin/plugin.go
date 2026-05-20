@@ -19,6 +19,12 @@ const (
 	VerbLoadFor       = "load-for"
 	VerbFilesDownload = "files-download"
 	VerbLogin         = "login"
+	// VerbSyncTo lets a provider take over an entire sql:sync end-to-end
+	// (e.g. Skpr's "pull pre-built image" pattern that bypasses the
+	// dump+load chain). Providers that don't implement it should exit
+	// with ExitVerbUnsupported or ExitNotSupported; dconsole then falls
+	// back to the standard dump+load flow.
+	VerbSyncTo = "sync-to"
 )
 
 // Exit codes. Plugins MUST use these for the documented conditions;

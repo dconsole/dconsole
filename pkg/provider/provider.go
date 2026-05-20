@@ -20,6 +20,13 @@ var ErrNotSupported = errors.New("not supported by this provider")
 // orchestrator then falls back to generic transport-based paths.
 type Provider interface {
 	Name() string
+	// SyncTo takes over the entire sql:sync end-to-end. Hosting
+	// integrations whose preferred model isn't a SQL dump (e.g. Skpr,
+	// which publishes a nightly Docker image you pull + rebuild
+	// locally) implement this to short-circuit the dump+load chain.
+	// Providers that just supply dumps return ErrNotSupported and
+	// dconsole falls back to DumpFor / LoadFor.
+	SyncTo(ctx context.Context, source, target *alias.Alias) error
 	// DumpFor returns a local path to a database dump for `a`. The
 	// returned cleanup function is called by the orchestrator when the
 	// dump is no longer needed.

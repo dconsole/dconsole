@@ -11,6 +11,20 @@ import (
 	"github.com/heydon/dconsole/internal/alias"
 )
 
+// DBImporter is an optional capability a Transport may implement when
+// it has a native, faster database-import path than feeding bytes to
+// drush sql:cli. The sql:sync orchestrator type-asserts each target
+// transport against this interface and uses it in preference to the
+// generic pipe-to-drush fallback. ddev implements it via
+// `ddev import-db`; other transports can opt in later.
+//
+// dumpPath is a local path to a gzipped SQL file. Implementations are
+// responsible for un-gzipping if their tool needs it (ddev import-db
+// accepts .sql.gz natively).
+type DBImporter interface {
+	ImportDB(ctx context.Context, a *alias.Alias, dumpPath string) error
+}
+
 // Transport reaches a remote environment described by an Alias. Each
 // implementation wraps a CLI on $PATH (ssh, docker, kubectl, ddev, …) or
 // proxies to a subprocess plugin.

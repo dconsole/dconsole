@@ -74,6 +74,44 @@ func (s *subprocessProvider) Login(ctx context.Context, a *alias.Alias) error {
 	return nil
 }
 
+// SyncTo dispatches the optional sync-to verb so plugin providers can
+// take over the whole sql:sync (e.g. Skpr's "pull a pre-built image and
+// rebuild" pattern). The target alias is plumbed via a second
+// --target-alias-json= file alongside the usual --alias-json=<source>.
+// Plugins that don't implement this exit with 64/66 → ErrNotSupported.
+func (s *subprocessProvider) SyncTo(ctx context.Context, source, target *alias.Alias) error {
+	srcPath, srcCleanup, err := writeProviderEnvelope(source)
+	if err != nil {
+		return err
+	}
+	defer srcCleanup()
+	tgtPath, tgtCleanup, err := writeProviderEnvelope(target)
+	if err != nil {
+		return err
+	}
+	defer tgtCleanup()
+
+	c := exec.CommandContext(ctx, s.bin,
+		plugin.VerbSyncTo,
+		"--alias-json="+srcPath,
+		"--target-alias-json="+tgtPath,
+	)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	if err := c.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			switch exitErr.ExitCode() {
+			case plugin.ExitVerbUnsupported, plugin.ExitNotSupported:
+				return ErrNotSupported
+			}
+		}
+		return fmt.Errorf("plugin dconsole-%s sync-to: %w", s.typ, err)
+	}
+	return nil
+}
+
 func (s *subprocessProvider) DumpFor(ctx context.Context, a *alias.Alias) (string, func(), error) {
 	envelopePath, cleanup, err := writeProviderEnvelope(a)
 	if err != nil {

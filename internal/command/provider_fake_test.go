@@ -26,6 +26,10 @@ type fakeProviderConfig struct {
 	// DumpPath is the local file DumpFor reports as the source dump.
 	// Tests pre-create a gzipped SQL file there.
 	DumpPath string `yaml:"dump_path"`
+	// SyncToCmd, when non-empty, makes SyncTo exec this command (instead
+	// of returning ErrNotSupported). Tests use it to assert the
+	// end-to-end takeover branch fires and the dump+load chain doesn't.
+	SyncToCmd []string `yaml:"sync_to_cmd"`
 }
 
 func init() {
@@ -52,6 +56,16 @@ func (f *fakeprovider) Login(ctx context.Context, a *alias.Alias) error {
 		return nil
 	}
 	return exec.CommandContext(ctx, f.cfg.LoginCmd[0], f.cfg.LoginCmd[1:]...).Run()
+}
+
+// SyncTo runs SyncToCmd if configured (so tests can assert the
+// end-to-end takeover); otherwise returns ErrNotSupported so the
+// orchestrator falls through to DumpFor + LoadFor.
+func (f *fakeprovider) SyncTo(ctx context.Context, source, target *alias.Alias) error {
+	if len(f.cfg.SyncToCmd) == 0 {
+		return provider.ErrNotSupported
+	}
+	return exec.CommandContext(ctx, f.cfg.SyncToCmd[0], f.cfg.SyncToCmd[1:]...).Run()
 }
 
 func (f *fakeprovider) DumpFor(ctx context.Context, a *alias.Alias) (string, func(), error) {

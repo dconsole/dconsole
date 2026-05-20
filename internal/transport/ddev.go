@@ -81,6 +81,24 @@ func (d *ddevTransport) Preview(remoteCmd []string) []string {
 	return d.build(context.Background(), remoteCmd).Args
 }
 
+// ImportDB satisfies pkg/transport.DBImporter so sql:sync uses
+// `ddev import-db --file=<dump.sql.gz>` instead of streaming bytes
+// through drush sql:cli — significantly faster for large dumps. The
+// optional target database key (alias.sql.target.database) is
+// forwarded via --database=<key> if set.
+func (d *ddevTransport) ImportDB(ctx context.Context, a *alias.Alias, dumpPath string) error {
+	args := []string{"import-db", "--file=" + dumpPath}
+	if db := a.SQL.Target.Database; db != "" && db != "default" {
+		args = append(args, "--database="+db)
+	}
+	cmd := exec.CommandContext(ctx, "ddev", args...)
+	cmd.Dir = d.approot
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 func (d *ddevTransport) Shell(ctx context.Context, workDir string) error {
 	args := []string{"ssh"}
 	if d.cfg.Service != "" {
