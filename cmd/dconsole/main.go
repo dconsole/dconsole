@@ -276,6 +276,10 @@ func runAliasConvert(args []string) error {
 }
 
 func runRsync(ctx context.Context, loader *alias.Loader, args []string) error {
+	if command.ArgsHaveHelpFlag(args) {
+		command.RenderCommandHelp(os.Stdout, command.RsyncSpec())
+		return nil
+	}
 	opts := command.RsyncOpts{}
 	var positional []string
 	for _, arg := range args {
@@ -289,7 +293,7 @@ func runRsync(ctx context.Context, loader *alias.Loader, args []string) error {
 		}
 	}
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: dconsole rsync <src> <dst> [--force]\n  src/dst = @site.env:%%files (or %%root/%%private/abs-path), or ./local/path")
+		return fmt.Errorf("usage: dconsole rsync <src> <dst> [--force]\n  src/dst = @site.env:%%files (or %%root/%%private/abs-path), or ./local/path\n  run `dconsole rsync --help` for the full reference")
 	}
 	src, err := command.ParseEndpoint(positional[0], loader)
 	if err != nil {
@@ -303,6 +307,10 @@ func runRsync(ctx context.Context, loader *alias.Loader, args []string) error {
 }
 
 func runSqlSync(ctx context.Context, loader *alias.Loader, args []string) error {
+	if command.ArgsHaveHelpFlag(args) {
+		command.RenderCommandHelp(os.Stdout, command.SqlSyncSpec())
+		return nil
+	}
 	opts := command.SqlSyncOpts{}
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -326,7 +334,7 @@ func runSqlSync(ctx context.Context, loader *alias.Loader, args []string) error 
 		}
 	}
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: dconsole sql:sync @source.env @target.env [--keep-dump] [--dump-path PATH] [--force]")
+		return fmt.Errorf("usage: dconsole sql:sync @source.env @target.env [--keep-dump] [--dump-path PATH] [--force]\n  run `dconsole sql:sync --help` for the full reference")
 	}
 	source, err := loader.ResolveRef(positional[0])
 	if err != nil {
