@@ -313,7 +313,7 @@ func runRsync(ctx context.Context, loader *alias.Loader, args []string) error {
 	if err != nil {
 		return fmt.Errorf("destination: %w", err)
 	}
-	return command.Rsync(ctx, src, dst, os.Stdout, opts)
+	return command.Rsync(ctx, src, dst, os.Stdout, os.Stdin, opts)
 }
 
 func runSqlSync(ctx context.Context, loader *alias.Loader, args []string) error {

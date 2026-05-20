@@ -63,7 +63,7 @@ func SqlSync(ctx context.Context, source, target *alias.Alias, out io.Writer, in
 	// 0. Cross-site safety. Runs BEFORE policy check so habitual --force
 	// use can't bypass it.
 	if source.Site != target.Site {
-		if err := confirmCrossSite(source, target, opts, in, out); err != nil {
+		if err := confirmCrossSite(source, target, opts.ConfirmCrossSite, in, out); err != nil {
 			return err
 		}
 	}
@@ -96,17 +96,17 @@ func SqlSync(ctx context.Context, source, target *alias.Alias, out io.Writer, in
 }
 
 // confirmCrossSite warns about a cross-site sync and either prompts
-// interactively (when `in` is a usable reader) or requires
-// opts.ConfirmCrossSite. Returns nil if the user approved; an error
-// (without dumping) if not.
-func confirmCrossSite(source, target *alias.Alias, opts SqlSyncOpts, in io.Reader, out io.Writer) error {
+// interactively (when `in` is a usable reader) or requires the
+// confirm flag. Returns nil if the user approved; an error (without
+// transferring any bytes) if not. Shared between sql:sync and rsync.
+func confirmCrossSite(source, target *alias.Alias, confirmed bool, in io.Reader, out io.Writer) error {
 	fmt.Fprintf(out, "─── CROSS-SITE sql:sync ──────────────────────────────\n")
 	fmt.Fprintf(out, "  source: @%s.%s (%s)\n", source.Site, source.Env, source.URI)
 	fmt.Fprintf(out, "  target: @%s.%s (%s)\n", target.Site, target.Env, target.URI)
 	fmt.Fprintf(out, "\nThis sync writes data from site %q INTO site %q. Confirm by typing the\n", source.Site, target.Site)
 	fmt.Fprintf(out, "target site's name (%q), or rerun with --confirm-cross-site for scripted use.\n", target.Site)
 
-	if opts.ConfirmCrossSite {
+	if confirmed {
 		fmt.Fprintln(out, "  → --confirm-cross-site supplied; proceeding")
 		return nil
 	}

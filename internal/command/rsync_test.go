@@ -22,7 +22,7 @@ func TestRsyncLocalToLocal(t *testing.T) {
 	srcE := &Endpoint{Local: src}
 	dstE := &Endpoint{Local: dst}
 
-	if err := Rsync(context.Background(), srcE, dstE, io.Discard, RsyncOpts{}); err != nil {
+	if err := Rsync(context.Background(), srcE, dstE, io.Discard, nil, RsyncOpts{}); err != nil {
 		t.Fatalf("Rsync: %v", err)
 	}
 	mustRead(t, filepath.Join(dst, "a.txt"), "alpha")
@@ -71,7 +71,7 @@ esac
 	dstE := &Endpoint{Local: dst}
 
 	var out bytes.Buffer
-	if err := Rsync(context.Background(), srcE, dstE, &out, RsyncOpts{Verbose: true}); err != nil {
+	if err := Rsync(context.Background(), srcE, dstE, &out, nil, RsyncOpts{Verbose: true}); err != nil {
 		t.Fatalf("Rsync: %v\noutput:\n%s", err, out.String())
 	}
 	mustRead(t, filepath.Join(dst, "logo.png"), "PNGDATA")

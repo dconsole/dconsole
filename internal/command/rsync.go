@@ -7,13 +7,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/heydon/dconsole/internal/alias"
+	"github.com/heydon/dconsole/internal/assetscache"
+	"github.com/heydon/dconsole/internal/dlog"
 	"github.com/heydon/dconsole/internal/provider"
 	"github.com/heydon/dconsole/internal/sitepath"
+	pkgtransport "github.com/heydon/dconsole/pkg/transport"
 	"github.com/heydon/dconsole/internal/transport"
 )
 
@@ -79,13 +83,49 @@ type RsyncOpts struct {
 	CacheTTL time.Duration
 }
 
-// Rsync copies files between two endpoints. The default strategy is
-// tar-streaming via Transport.Pipe, which works for all transports at the
-// cost of staging the bytes through the local machine.
+// Rsync copies files between two endpoints. Two modes:
 //
-// When both endpoints are alias-bound, per-env Policy is consulted before
-// any bytes move. --force bypasses the check.
-func Rsync(ctx context.Context, src, dst *Endpoint, out io.Writer, opts RsyncOpts) error {
+//   - Orchestrator branch (both endpoints alias-bound, pathspec is a
+//     token like %files / %private): cross-site safety, provider
+//     SyncFilesTo / FilesDownload, mode dispatch (auto / rsync / diff
+//     / stage-file-proxy). Pulls and pushes via the strategy chain.
+//   - Legacy tar-stream branch (freeform paths or local endpoint):
+//     existing per-endpoint tar-pipe behaviour, unchanged. Provider
+//     hook only fires when both endpoints are alias-bound with the
+//     %files token.
+//
+// Cross-site (source.Site != target.Site) prompts for confirmation
+// before any policy check and before any bytes move; --confirm-cross-
+// site bypasses it for scripts.
+func Rsync(ctx context.Context, src, dst *Endpoint, out io.Writer, in io.Reader, opts RsyncOpts) error {
+	if isOrchestratable(src, dst) {
+		return runAssetSync(ctx, src, dst, out, in, opts)
+	}
+	return rsyncLegacy(ctx, src, dst, out, opts)
+}
+
+// isOrchestratable reports whether both endpoints qualify for the new
+// orchestrator path: each carries an Alias and a pathspec that resolves
+// to %files / %private (the supported tokens). Freeform paths
+// (`@x:/abs/path`, `./local/files`) keep the legacy behaviour.
+func isOrchestratable(src, dst *Endpoint) bool {
+	if src.Alias == nil || dst.Alias == nil {
+		return false
+	}
+	return isPathspecToken(src.PathSpec) && isPathspecToken(dst.PathSpec)
+}
+
+func isPathspecToken(ps string) bool {
+	switch ps {
+	case "", "%files", "%private":
+		return true
+	}
+	return false
+}
+
+// rsyncLegacy is the pre-orchestrator behaviour, kept for backward
+// compatibility with freeform endpoints (arbitrary paths, local).
+func rsyncLegacy(ctx context.Context, src, dst *Endpoint, out io.Writer, opts RsyncOpts) error {
 	if src.Alias != nil && dst.Alias != nil {
 		if err := alias.CheckSync(src.Alias, dst.Alias, opts.Force); err != nil {
 			return err
@@ -96,22 +136,363 @@ func Rsync(ctx context.Context, src, dst *Endpoint, out io.Writer, opts RsyncOpt
 		return err
 	}
 	defer srcCleanup()
-
 	if opts.Verbose {
 		fmt.Fprintf(out, "source: %s\n", srcAbs)
 	}
-
 	dstAbs, dstCleanup, err := writeSide(ctx, dst, srcReader, "destination")
 	if err != nil {
 		return err
 	}
 	defer dstCleanup()
-
 	if opts.Verbose {
 		fmt.Fprintf(out, "destination: %s\n", dstAbs)
 	}
 	fmt.Fprintln(out, "rsync complete")
 	return nil
+}
+
+// runAssetSync is the orchestrator path. Iterates pathspecs and
+// dispatches by mode.
+func runAssetSync(ctx context.Context, src, dst *Endpoint, out io.Writer, in io.Reader, opts RsyncOpts) error {
+	if src.Alias.Site != dst.Alias.Site {
+		if err := confirmCrossSite(src.Alias, dst.Alias, opts.ConfirmCrossSite, in, out); err != nil {
+			return err
+		}
+	}
+	if err := alias.CheckSync(src.Alias, dst.Alias, opts.Force); err != nil {
+		return err
+	}
+
+	pathspecs := effectivePathspecs(src.PathSpec, opts)
+	for _, ps := range pathspecs {
+		if err := syncOnePathspec(ctx, src.Alias, dst.Alias, ps, out, opts); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintln(out, "rsync complete")
+	return nil
+}
+
+// effectivePathspecs decides which pathspecs to sync for this run.
+// PathspecOverride (set via --pathspec=LIST) wins outright; otherwise
+// %files always runs, plus %private when --include-private is set.
+// An explicit pathspec on the endpoint (`@x:%private`) restricts to
+// just that one.
+func effectivePathspecs(endpointPS string, opts RsyncOpts) []string {
+	if len(opts.PathspecOverride) > 0 {
+		return opts.PathspecOverride
+	}
+	if endpointPS != "" {
+		return []string{endpointPS}
+	}
+	out := []string{"%files"}
+	if opts.IncludePrivate {
+		out = append(out, "%private")
+	}
+	return out
+}
+
+// syncOnePathspec handles a single pathspec end-to-end: provider
+// hooks first, then mode dispatch.
+func syncOnePathspec(ctx context.Context, source, target *alias.Alias, ps string, out io.Writer, opts RsyncOpts) error {
+	// 1. Provider SyncFilesTo — full end-to-end takeover. Skpr image
+	//    pulls fall here.
+	if p, _ := provider.For(source); p != nil {
+		err := p.SyncFilesTo(ctx, source, target)
+		if err == nil {
+			fmt.Fprintf(out, "synced assets (%s) via provider %s (end-to-end)\n", ps, p.Name())
+			return nil
+		}
+		if !errors.Is(err, provider.ErrNotSupported) {
+			return fmt.Errorf("%s.SyncFilesTo: %w", p.Name(), err)
+		}
+	}
+
+	// 2. Provider FilesDownload + LoadFilesFor — provider supplies the
+	//    bundle, dconsole loads it.
+	if p, _ := provider.For(source); p != nil {
+		bundle, cleanup, err := tryProviderBundle(ctx, p, source, ps, out, opts)
+		if err == nil {
+			defer cleanup()
+			return loadProviderBundle(ctx, target, bundle, out)
+		} else if !errors.Is(err, provider.ErrNotSupported) {
+			return err
+		}
+	}
+
+	// 3. Mode dispatch — uses live source/target transports.
+	srcAbs, dstAbs, err := resolvePathspecEnds(ctx, source, target, ps)
+	if err != nil {
+		return err
+	}
+	switch opts.Mode {
+	case "stage-file-proxy":
+		return configureStageFileProxy(ctx, source, target, out, opts)
+	case "diff":
+		return diffSyncOne(ctx, source, target, srcAbs, dstAbs, out, opts)
+	case "rsync":
+		return rsyncOnly(ctx, source, target, srcAbs, dstAbs, opts, out)
+	default: // "auto" or ""
+		err := autoRsync(ctx, source, target, srcAbs, dstAbs, opts, out)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, errStrategyNotApplicable) {
+			return err
+		}
+		dlog.Infof("auto: falling back to diff+tar")
+		return diffSyncOne(ctx, source, target, srcAbs, dstAbs, out, opts)
+	}
+}
+
+// resolvePathspecEnds asks each side's sitepath for the absolute path
+// of the named pathspec and returns the pair.
+func resolvePathspecEnds(ctx context.Context, source, target *alias.Alias, ps string) (string, string, error) {
+	srcT, err := transport.For(source)
+	if err != nil {
+		return "", "", fmt.Errorf("source transport: %w", err)
+	}
+	srcBin, err := resolveBin(ctx, source, srcT)
+	if err != nil {
+		return "", "", fmt.Errorf("source bin: %w", err)
+	}
+	srcPaths, err := sitepath.Resolve(ctx, source, srcBin, &transportProber{t: srcT})
+	if err != nil {
+		return "", "", fmt.Errorf("source sitepath: %w", err)
+	}
+	srcAbs, err := sitepathToken(source, srcPaths, ps)
+	if err != nil {
+		return "", "", err
+	}
+
+	tgtT, err := transport.For(target)
+	if err != nil {
+		return "", "", fmt.Errorf("target transport: %w", err)
+	}
+	tgtBin, err := resolveBin(ctx, target, tgtT)
+	if err != nil {
+		return "", "", fmt.Errorf("target bin: %w", err)
+	}
+	tgtPaths, err := sitepath.Resolve(ctx, target, tgtBin, &transportProber{t: tgtT})
+	if err != nil {
+		return "", "", fmt.Errorf("target sitepath: %w", err)
+	}
+	dstAbs, err := sitepathToken(target, tgtPaths, ps)
+	if err != nil {
+		return "", "", err
+	}
+	return srcAbs, dstAbs, nil
+}
+
+// sitepathToken maps a token to the absolute path on the alias.
+func sitepathToken(a *alias.Alias, paths *sitepath.Paths, ps string) (string, error) {
+	switch ps {
+	case "", "%files":
+		if paths.Files == "" {
+			return "", fmt.Errorf("@%s.%s has no files path", a.Site, a.Env)
+		}
+		return paths.Files, nil
+	case "%private":
+		if paths.Private == "" {
+			return "", fmt.Errorf("@%s.%s has no private files path", a.Site, a.Env)
+		}
+		return paths.Private, nil
+	}
+	return "", fmt.Errorf("unsupported pathspec %q for orchestrator", ps)
+}
+
+// diffSyncOne runs the diff mode for one pathspec.
+func diffSyncOne(ctx context.Context, source, target *alias.Alias, srcAbs, dstAbs string, out io.Writer, opts RsyncOpts) error {
+	srcT, _ := transport.For(source)
+	tgtT, _ := transport.For(target)
+	fmt.Fprintf(out, "scanning @%s.%s:%s and @%s.%s:%s …\n", source.Site, source.Env, srcAbs, target.Site, target.Env, dstAbs)
+	srcFiles, tgtFiles, err := scanRemoteConcurrent(ctx, srcT, srcAbs, tgtT, dstAbs)
+	if err != nil {
+		return err
+	}
+	changed, deletedOnTarget := diffSets(srcFiles, tgtFiles)
+	summary := Summarise(srcFiles, changed, deletedOnTarget)
+	fmt.Fprintf(out, "%d changed, %d unchanged, %d only-on-target (--delete=%v)\n",
+		summary.Changed, summary.UnchangedFiles, summary.DeletedOnTarget, opts.Delete)
+	if len(changed) > 0 {
+		if err := streamChanged(ctx, srcT, srcAbs, tgtT, dstAbs, changed); err != nil {
+			return err
+		}
+	}
+	if opts.Delete && len(deletedOnTarget) > 0 {
+		if err := removeOnTarget(ctx, tgtT, dstAbs, deletedOnTarget); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// tryProviderBundle handles the provider.FilesDownload path with
+// caching. Returns ErrNotSupported when the provider declines.
+func tryProviderBundle(ctx context.Context, p provider.Provider, source *alias.Alias, ps string, out io.Writer, opts RsyncOpts) (string, func(), error) {
+	if opts.NoCache {
+		return providerDownloadAndBundle(ctx, p, source, ps, out)
+	}
+	key := assetscache.KeyFor(assetscache.KeyInputs{
+		Site:     source.Site,
+		Env:      source.Env,
+		Strategy: "provider:" + p.Name(),
+		Pathspec: ps,
+	})
+	if !opts.Refresh {
+		ttl, err := effectiveAssetsTTL(source, opts)
+		if err != nil {
+			return "", nil, err
+		}
+		if path, hit, _ := assetscache.Get(key, ttl); hit {
+			fmt.Fprintf(out, "cache hit: %s (TTL %s)\n", path, ttl)
+			return path, func() {}, nil
+		}
+	} else {
+		_ = assetscache.Invalidate(key)
+	}
+	bundle, cleanup, err := providerDownloadAndBundle(ctx, p, source, ps, out)
+	if err != nil {
+		return "", nil, err
+	}
+	cached, err := assetscache.Put(key, bundle, assetscache.Metadata{
+		Site:     source.Site,
+		Env:      source.Env,
+		Strategy: "provider:" + p.Name(),
+		Pathspec: ps,
+	})
+	if err != nil {
+		fmt.Fprintf(out, "warning: cache write failed (%v); using temp bundle\n", err)
+		return bundle, cleanup, nil
+	}
+	cleanup() // remove the temp bundle; cached file is canonical
+	fmt.Fprintf(out, "cached bundle at %s\n", cached)
+	return cached, func() {}, nil
+}
+
+func providerDownloadAndBundle(ctx context.Context, p provider.Provider, source *alias.Alias, ps string, out io.Writer) (string, func(), error) {
+	stage, err := os.MkdirTemp("", "dconsole-provider-files-")
+	if err != nil {
+		return "", nil, err
+	}
+	if err := p.FilesDownload(ctx, source, stage); err != nil {
+		os.RemoveAll(stage)
+		return "", nil, err
+	}
+	bundle, err := tarGzipDir(stage)
+	os.RemoveAll(stage)
+	if err != nil {
+		return "", nil, err
+	}
+	return bundle, func() { os.Remove(bundle) }, nil
+}
+
+func loadProviderBundle(ctx context.Context, target *alias.Alias, bundle string, out io.Writer) error {
+	if p, _ := provider.For(target); p != nil {
+		err := p.LoadFilesFor(ctx, target, bundle)
+		if err == nil {
+			fmt.Fprintf(out, "loaded bundle via provider %s\n", p.Name())
+			return nil
+		}
+		if !errors.Is(err, provider.ErrNotSupported) {
+			return fmt.Errorf("%s.LoadFilesFor: %w", p.Name(), err)
+		}
+	}
+	tgtT, err := transport.For(target)
+	if err != nil {
+		return err
+	}
+	if imp, ok := tgtT.(pkgtransport.FilesImporter); ok {
+		fmt.Fprintf(out, "loading bundle via %s import-files\n", tgtT.Name())
+		return imp.ImportFiles(ctx, target, bundle)
+	}
+	// Plain tar-stream: stage and push.
+	stage, err := os.MkdirTemp("", "dconsole-loadbundle-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
+	if err := untarLocalFile(bundle, stage); err != nil {
+		return err
+	}
+	// Without a known target abs path, can't tar-stream-push meaningfully.
+	return fmt.Errorf("target transport %s has no native files importer; provider-bundle path falls through to per-pathspec push (use diff mode for now)", tgtT.Name())
+}
+
+func untarLocalFile(tarball, dst string) error {
+	cmd := exec.Command("tar", "xzf", tarball, "-C", dst)
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// effectiveAssetsTTL: --cache-ttl wins, then alias.assets.cache.ttl,
+// then assetscache.DefaultTTL.
+func effectiveAssetsTTL(a *alias.Alias, opts RsyncOpts) (time.Duration, error) {
+	if opts.CacheTTL != 0 {
+		return opts.CacheTTL, nil
+	}
+	return assetscache.ParseTTL(a.Assets.Cache.TTL)
+}
+
+// configureStageFileProxy enables and configures the Stage File Proxy
+// contributed module on the target via drush. drush 9+ uses
+// `pm:enable` + `config:set`; drush 8 uses `pm-enable` + `vset`. We
+// try the d9+ syntax first and fall back on failure.
+func configureStageFileProxy(ctx context.Context, source, target *alias.Alias, out io.Writer, opts RsyncOpts) error {
+	if source.URI == "" {
+		return fmt.Errorf("--mode=stage-file-proxy requires the source alias (@%s.%s) to declare uri:", source.Site, source.Env)
+	}
+	tgtT, err := transport.For(target)
+	if err != nil {
+		return err
+	}
+	if err := tgtT.Available(); err != nil {
+		return err
+	}
+	bin, err := resolveBin(ctx, target, tgtT)
+	if err != nil {
+		return err
+	}
+
+	// Try drush 9+ commands first.
+	enableD9 := augmentDrushContext(target, []string{"pm:enable", "stage_file_proxy", "-y"})
+	enableD9 = append(enableD9, dlog.DrushFlags()...)
+	enableCmd := bin.Argv(enableD9)
+	dlog.Cmdf(tgtT.Preview(enableCmd))
+	if err := tgtT.Exec(ctx, enableCmd, defaultStdio()); err != nil {
+		// Cascade to drush 8: pm-enable.
+		fmt.Fprintf(out, "drush pm:enable failed (%v); trying drush 8 pm-enable\n", err)
+		enableD8 := augmentDrushContext(target, []string{"pm-enable", "stage_file_proxy", "-y"})
+		enableD8 = append(enableD8, dlog.DrushFlags()...)
+		enableCmd8 := bin.Argv(enableD8)
+		dlog.Cmdf(tgtT.Preview(enableCmd8))
+		if err := tgtT.Exec(ctx, enableCmd8, defaultStdio()); err != nil {
+			return fmt.Errorf("enable stage_file_proxy on @%s.%s: %w", target.Site, target.Env, err)
+		}
+	}
+
+	// Try drush 9+ config:set first; fall back to drush 8 vset.
+	setD9 := augmentDrushContext(target, []string{"config:set", "stage_file_proxy.settings", "origin", source.URI, "-y"})
+	setD9 = append(setD9, dlog.DrushFlags()...)
+	setCmd := bin.Argv(setD9)
+	dlog.Cmdf(tgtT.Preview(setCmd))
+	if err := tgtT.Exec(ctx, setCmd, defaultStdio()); err != nil {
+		fmt.Fprintf(out, "drush config:set failed (%v); trying drush 8 vset\n", err)
+		setD8 := augmentDrushContext(target, []string{"vset", "stage_file_proxy_origin", source.URI, "-y"})
+		setD8 = append(setD8, dlog.DrushFlags()...)
+		setCmd8 := bin.Argv(setD8)
+		dlog.Cmdf(tgtT.Preview(setCmd8))
+		if err := tgtT.Exec(ctx, setCmd8, defaultStdio()); err != nil {
+			return fmt.Errorf("set stage_file_proxy origin on @%s.%s: %w", target.Site, target.Env, err)
+		}
+	}
+
+	fmt.Fprintf(out, "stage_file_proxy configured on @%s.%s with origin %s\n", target.Site, target.Env, source.URI)
+	return nil
+}
+
+func defaultStdio() pkgtransport.Stdio {
+	return pkgtransport.Stdio{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
 }
 
 // readSide opens the source endpoint as an io.Reader carrying a tar
