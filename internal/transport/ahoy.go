@@ -59,6 +59,7 @@ func (h *ahoyTransport) Pipe(ctx context.Context, remoteCmd []string, in io.Read
 	cmd := h.build(ctx, remoteCmd)
 	cmd.Stdin = in
 	cmd.Stdout = out
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 

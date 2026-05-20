@@ -499,6 +499,7 @@ func dumpToFile(ctx context.Context, t transport.Transport, bin *remotebin.Resol
 	if st := effectiveStructureTables(source, opts); len(st) > 0 {
 		args = append(args, "--structure-tables-list="+strings.Join(st, ","))
 	}
+	args = augmentDrushContext(source, args)
 	args = append(args, dlog.DrushFlags()...)
 	cmd := bin.Argv(args)
 	dlog.Cmdf(t.Preview(cmd))
@@ -522,6 +523,7 @@ func importFromFile(ctx context.Context, t transport.Transport, bin *remotebin.R
 	if db := effectiveTargetDatabase(target, opts); db != "" && db != "default" {
 		args = append(args, "--database="+db)
 	}
+	args = augmentDrushContext(target, args)
 	args = append(args, dlog.DrushFlags()...)
 	cmd := bin.Argv(args)
 	dlog.Cmdf(t.Preview(cmd))

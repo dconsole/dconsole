@@ -52,6 +52,7 @@ func (s *sshTransport) Pipe(ctx context.Context, remoteCmd []string, in io.Reade
 	cmd := exec.CommandContext(ctx, "ssh", s.sshArgs(remoteCmd)...)
 	cmd.Stdin = in
 	cmd.Stdout = out
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 

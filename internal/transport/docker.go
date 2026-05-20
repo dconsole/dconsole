@@ -49,6 +49,7 @@ func (d *dockerTransport) Pipe(ctx context.Context, remoteCmd []string, in io.Re
 	cmd := exec.CommandContext(ctx, "docker", d.argv(remoteCmd)...)
 	cmd.Stdin = in
 	cmd.Stdout = out
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 

@@ -49,6 +49,7 @@ func (c *composeTransport) Pipe(ctx context.Context, remoteCmd []string, in io.R
 	cmd := c.build(ctx, remoteCmd)
 	cmd.Stdin = in
 	cmd.Stdout = out
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 

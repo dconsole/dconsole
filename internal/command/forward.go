@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"strings"
 
 	"github.com/heydon/dconsole/internal/alias"
 	"github.com/heydon/dconsole/internal/dlog"
@@ -26,10 +27,42 @@ func Forward(ctx context.Context, a *alias.Alias, args []string) error {
 	if err != nil {
 		return err
 	}
+	args = augmentDrushContext(a, args)
 	args = appendDrushFlags(args)
 	cmd := bin.Argv(args)
 	dlog.Cmdf(t.Preview(cmd))
 	return t.Exec(ctx, cmd, run.DefaultStdio())
+}
+
+// augmentDrushContext prepends --root and --uri to args so drush can
+// bootstrap a Drupal site regardless of the remote CWD. Drush 8 in
+// particular won't find database credentials without --root, and the
+// user-visible "Unable to find a matching SQL Class" failure is the
+// symptom. Drush 9+ is more forgiving but the flags are still
+// authoritative. We skip whichever flag the caller already supplied
+// (so manual `dconsole @x cr --root=/other` still works).
+//
+// drush accepts the long forms (--root, --uri) and short -r/-l on
+// every supported version; we use the long forms for readability.
+func augmentDrushContext(a *alias.Alias, args []string) []string {
+	if a.Root != "" && !hasDrushFlag(args, "--root", "-r") {
+		args = append([]string{"--root=" + a.Root}, args...)
+	}
+	if a.URI != "" && !hasDrushFlag(args, "--uri", "-l") {
+		args = append([]string{"--uri=" + a.URI}, args...)
+	}
+	return args
+}
+
+func hasDrushFlag(args []string, names ...string) bool {
+	for _, a := range args {
+		for _, name := range names {
+			if a == name || strings.HasPrefix(a, name+"=") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // appendDrushFlags adds -v/-vv/-vvv to args if dlog is active AND the

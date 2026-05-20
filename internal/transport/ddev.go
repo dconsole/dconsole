@@ -60,6 +60,7 @@ func (d *ddevTransport) Pipe(ctx context.Context, remoteCmd []string, in io.Read
 	cmd := d.build(ctx, remoteCmd)
 	cmd.Stdin = in
 	cmd.Stdout = out
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 

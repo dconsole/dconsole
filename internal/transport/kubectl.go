@@ -49,6 +49,7 @@ func (k *kubectlTransport) Pipe(ctx context.Context, remoteCmd []string, in io.R
 	cmd := k.build(ctx, remoteCmd, in != nil)
 	cmd.Stdin = in
 	cmd.Stdout = out
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 

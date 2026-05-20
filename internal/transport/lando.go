@@ -50,6 +50,7 @@ func (l *landoTransport) Pipe(ctx context.Context, remoteCmd []string, in io.Rea
 	cmd := l.build(ctx, remoteCmd)
 	cmd.Stdin = in
 	cmd.Stdout = out
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 

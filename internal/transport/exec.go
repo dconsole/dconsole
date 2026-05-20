@@ -61,6 +61,7 @@ func (e *execTransport) Pipe(ctx context.Context, cmd []string, in io.Reader, ou
 	c.Dir = e.cfg.Dir
 	c.Stdin = in
 	c.Stdout = out
+	c.Stderr = os.Stderr
 	return c.Run()
 }
 
