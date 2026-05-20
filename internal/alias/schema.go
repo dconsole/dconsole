@@ -52,8 +52,18 @@ type Policy struct {
 // the same strategy; the schema doesn't enforce that but operationally
 // it's the sensible default.
 type SQL struct {
-	Source SQLSource `yaml:"source,omitempty"`
-	Target SQLTarget `yaml:"target,omitempty"`
+	Source SQLSource      `yaml:"source,omitempty"`
+	Target SQLTarget      `yaml:"target,omitempty"`
+	Cache  SQLCacheConfig `yaml:"cache,omitempty"`
+}
+
+// SQLCacheConfig tunes dconsole's local cache of source dumps for this
+// alias. Empty values use defaults from the dbcache package.
+type SQLCacheConfig struct {
+	// TTL is how long a cached dump is considered fresh. Go duration
+	// string ("6h", "30m", "24h"). Empty falls back to the dbcache
+	// default of 24h.
+	TTL string `yaml:"ttl,omitempty"`
 }
 
 // SQLSource selects how dconsole obtains a dump for this alias.
@@ -73,6 +83,21 @@ type SQLSource struct {
 	Path      string `yaml:"path,omitempty"`
 	Container string `yaml:"container,omitempty"`
 	Gzipped   *bool  `yaml:"gzipped,omitempty"`
+
+	// Database is the drush DB connection key to dump from
+	// (--database=<key>). Defaults to "default" when unset.
+	Database string `yaml:"database,omitempty"`
+
+	// StructureTables lists table names (globs OK) to dump schema-only,
+	// forwarded as `drush sql:dump --structure-tables-list=...`. Useful
+	// for cache_*, sessions, watchdog tables you don't want data for.
+	// Drush-strategy only — ignored by file / docker_cp / provider dumps.
+	StructureTables []string `yaml:"structure_tables,omitempty"`
+
+	// StructureTablesKey references a named array in drush's own config
+	// (e.g. "common"), forwarded as `--structure-tables-key=`. Mutually
+	// usable with StructureTables; drush merges them.
+	StructureTablesKey string `yaml:"structure_tables_key,omitempty"`
 }
 
 // SQLTarget selects how dconsole loads a dump into this alias. type:
@@ -80,6 +105,11 @@ type SQLSource struct {
 // strategies (e.g. a target-side restore script) plug in here.
 type SQLTarget struct {
 	Type string `yaml:"type,omitempty"`
+
+	// Database is the drush DB connection key to load INTO
+	// (--database=<key>). Forwarded to `drush sql:cli --database=` and
+	// `ddev import-db --database=`. Defaults to "default" when unset.
+	Database string `yaml:"database,omitempty"`
 }
 
 // SourceGzipped reports whether SQLSource expects gzipped bytes. Defaults
