@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/heydon/dconsole/internal/alias"
 	"github.com/heydon/dconsole/internal/provider"
@@ -46,12 +47,36 @@ func ParseEndpoint(token string, loader *alias.Loader) (*Endpoint, error) {
 	return &Endpoint{Local: token, PathSpec: token}, nil
 }
 
-// RsyncOpts are the supported flags. Mode and SSHOptions are honored
-// only when both endpoints are SSH and dconsole picks the real-rsync path
-// (not implemented in MVP; tar-streaming is always used).
+// RsyncOpts are the supported flags for `dconsole rsync`.
+//
+// Mode-related fields (Mode, IncludePrivate, Pathspec, Delete) only
+// take effect when both endpoints resolve to aliases — the legacy
+// freeform tar-stream path ignores them. Cache fields apply to the
+// provider-FilesDownload path; the rsync / diff modes are inherently
+// fresh per run.
 type RsyncOpts struct {
 	Verbose bool
 	Force   bool // bypass per-env sync_policy / allow_sync_* checks
+
+	// Mode: "" / "auto" (default) | "rsync" | "diff" | "stage-file-proxy".
+	Mode string
+
+	// Pathspec scope. IncludePrivate adds %private. PathspecOverride
+	// (set via --pathspec=LIST) replaces the default %files / %private
+	// pair with an explicit list.
+	IncludePrivate    bool
+	PathspecOverride  []string
+
+	// Delete: in diff mode, also remove files only on target.
+	Delete bool
+
+	// Cross-site safety bypass for scripted use (parity with sql:sync).
+	ConfirmCrossSite bool
+
+	// Provider-bundle cache controls. No-op in non-provider paths.
+	Refresh  bool
+	NoCache  bool
+	CacheTTL time.Duration
 }
 
 // Rsync copies files between two endpoints. The default strategy is
