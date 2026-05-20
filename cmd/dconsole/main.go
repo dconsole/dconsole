@@ -344,7 +344,7 @@ func runSqlSync(ctx context.Context, loader *alias.Loader, args []string) error 
 	if err != nil {
 		return fmt.Errorf("target: %w", err)
 	}
-	return command.SqlSync(ctx, source, target, os.Stdout, opts)
+	return command.SqlSync(ctx, source, target, os.Stdout, os.Stdin, opts)
 }
 
 func printUsage(w io.Writer) {

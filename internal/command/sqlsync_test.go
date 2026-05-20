@@ -20,6 +20,7 @@ import (
 // We don't actually run drush — instead we write tiny shell scripts that
 // act as the source/target binaries and verify the round-trip.
 func TestSqlSyncEndToEnd(t *testing.T) {
+	isolateSqlCache(t)
 	dir := t.TempDir()
 	const sqlBody = "CREATE TABLE x (id INT); INSERT INTO x VALUES (42);"
 
@@ -63,7 +64,7 @@ esac
 	}
 
 	var out bytes.Buffer
-	if err := SqlSync(context.Background(), source, target, &out, SqlSyncOpts{}); err != nil {
+	if err := SqlSync(context.Background(), source, target, &out, nil, SqlSyncOpts{}); err != nil {
 		t.Fatalf("SqlSync: %v\noutput:\n%s", err, out.String())
 	}
 
@@ -79,6 +80,7 @@ esac
 // TestSqlSyncRejectsNonGzip ensures we fail loudly if the source isn't
 // emitting a gzipped dump (operator misconfigured --gzip).
 func TestSqlSyncRejectsNonGzip(t *testing.T) {
+	isolateSqlCache(t)
 	dir := t.TempDir()
 	srcScript := filepath.Join(dir, "fake-source")
 	writeScript(t, srcScript, "#!/bin/sh\necho 'plain text, not gzip'\n")
@@ -95,7 +97,7 @@ func TestSqlSyncRejectsNonGzip(t *testing.T) {
 		Bin: alias.RemoteBin{Kind: "drush", Path: tgtScript},
 		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
 	}
-	err := SqlSync(context.Background(), source, target, io.Discard, SqlSyncOpts{})
+	err := SqlSync(context.Background(), source, target, io.Discard, nil, SqlSyncOpts{})
 	if err == nil {
 		t.Fatal("expected error for non-gzip dump, got nil")
 	}
@@ -107,6 +109,7 @@ func TestSqlSyncRejectsNonGzip(t *testing.T) {
 // reports a pre-baked dump path — exactly what a real provider plugin
 // would do — so we don't need any third-party hosting CLI to run this.
 func TestSqlSyncFromProvider(t *testing.T) {
+	isolateSqlCache(t)
 	dir := t.TempDir()
 	const dumpBody = "CREATE TABLE t(id INT); INSERT INTO t VALUES (42);"
 
@@ -143,7 +146,7 @@ esac
 	}
 
 	var out bytes.Buffer
-	if err := SqlSync(context.Background(), source, target, &out, SqlSyncOpts{}); err != nil {
+	if err := SqlSync(context.Background(), source, target, &out, nil, SqlSyncOpts{}); err != nil {
 		t.Fatalf("SqlSync: %v\noutput:\n%s", err, out.String())
 	}
 
@@ -162,6 +165,7 @@ esac
 // TestSqlSyncFromFileStrategy uses sql.source.type=file: source has a
 // pre-made gzipped dump at a known path; dconsole `cat`s it via transport.
 func TestSqlSyncFromFileStrategy(t *testing.T) {
+	isolateSqlCache(t)
 	dir := t.TempDir()
 	const sqlBody = "INSERT INTO t VALUES (7);"
 	dumpFile := filepath.Join(dir, "backup.sql.gz")
@@ -191,7 +195,7 @@ esac
 	}
 
 	var out bytes.Buffer
-	if err := SqlSync(context.Background(), source, target, &out, SqlSyncOpts{}); err != nil {
+	if err := SqlSync(context.Background(), source, target, &out, nil, SqlSyncOpts{}); err != nil {
 		t.Fatalf("SqlSync: %v\noutput:\n%s", err, out.String())
 	}
 	got, err := os.ReadFile(importedFile)
@@ -206,6 +210,7 @@ esac
 // TestSqlSyncFromFileStrategy_Plain verifies that a plain (non-gzipped)
 // remote dump is gzipped locally before being handed to the importer.
 func TestSqlSyncFromFileStrategy_Plain(t *testing.T) {
+	isolateSqlCache(t)
 	dir := t.TempDir()
 	const sqlBody = "INSERT INTO t VALUES (99);"
 	dumpFile := filepath.Join(dir, "backup.sql")
@@ -236,7 +241,7 @@ esac
 		Transport: alias.Transport{Type: "exec", Exec: &alias.ExecTransport{}},
 	}
 
-	if err := SqlSync(context.Background(), source, target, io.Discard, SqlSyncOpts{}); err != nil {
+	if err := SqlSync(context.Background(), source, target, io.Discard, nil, SqlSyncOpts{}); err != nil {
 		t.Fatalf("SqlSync: %v", err)
 	}
 	got, err := os.ReadFile(importedFile)
@@ -252,6 +257,7 @@ esac
 // that copies a known dump file. Exercises the docker_cp strategy without
 // requiring a real docker daemon.
 func TestSqlSyncFromDockerCp(t *testing.T) {
+	isolateSqlCache(t)
 	dir := t.TempDir()
 	const sqlBody = "CREATE TABLE t(id INT);"
 	srcDump := filepath.Join(dir, "src-dump.sql.gz")
@@ -296,7 +302,7 @@ esac
 	}
 
 	var out bytes.Buffer
-	if err := SqlSync(context.Background(), source, target, &out, SqlSyncOpts{}); err != nil {
+	if err := SqlSync(context.Background(), source, target, &out, nil, SqlSyncOpts{}); err != nil {
 		t.Fatalf("SqlSync: %v\noutput:\n%s", err, out.String())
 	}
 	got, err := os.ReadFile(importedFile)
@@ -332,5 +338,14 @@ func writeScript(t *testing.T, path, body string) {
 	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// isolateSqlCache redirects dbcache.Dir() into a per-test temporary
+// directory so the sql:sync cache doesn't leak between tests (or hit
+// the real user cache on the dev machine). Every sql:sync-related test
+// should call this at the start.
+func isolateSqlCache(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 }
 
