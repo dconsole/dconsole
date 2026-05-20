@@ -30,6 +30,13 @@ type fakeProviderConfig struct {
 	// of returning ErrNotSupported). Tests use it to assert the
 	// end-to-end takeover branch fires and the dump+load chain doesn't.
 	SyncToCmd []string `yaml:"sync_to_cmd"`
+	// SyncFilesToCmd is the rsync sibling of SyncToCmd. Tests use it to
+	// assert the dconsole rsync end-to-end takeover branch fires.
+	SyncFilesToCmd []string `yaml:"sync_files_to_cmd"`
+	// LoadFilesCmd, when non-empty, runs from LoadFilesFor (--bundle-path
+	// is appended). Tests use it to assert provider.LoadFilesFor took
+	// priority over the transport / FilesImporter chain.
+	LoadFilesCmd []string `yaml:"load_files_cmd"`
 }
 
 func init() {
@@ -66,6 +73,26 @@ func (f *fakeprovider) SyncTo(ctx context.Context, source, target *alias.Alias) 
 		return provider.ErrNotSupported
 	}
 	return exec.CommandContext(ctx, f.cfg.SyncToCmd[0], f.cfg.SyncToCmd[1:]...).Run()
+}
+
+// SyncFilesTo runs SyncFilesToCmd if configured; tests use it to
+// confirm the rsync end-to-end takeover branch fires.
+func (f *fakeprovider) SyncFilesTo(ctx context.Context, source, target *alias.Alias) error {
+	if len(f.cfg.SyncFilesToCmd) == 0 {
+		return provider.ErrNotSupported
+	}
+	return exec.CommandContext(ctx, f.cfg.SyncFilesToCmd[0], f.cfg.SyncFilesToCmd[1:]...).Run()
+}
+
+// LoadFilesFor runs LoadFilesCmd with the bundle path appended; tests
+// can capture the argv via the command script to assert routing.
+func (f *fakeprovider) LoadFilesFor(ctx context.Context, a *alias.Alias, bundlePath string) error {
+	if len(f.cfg.LoadFilesCmd) == 0 {
+		return provider.ErrNotSupported
+	}
+	args := append([]string(nil), f.cfg.LoadFilesCmd[1:]...)
+	args = append(args, bundlePath)
+	return exec.CommandContext(ctx, f.cfg.LoadFilesCmd[0], args...).Run()
 }
 
 func (f *fakeprovider) DumpFor(ctx context.Context, a *alias.Alias) (string, func(), error) {

@@ -107,6 +107,33 @@ func (s *sshTransport) sshArgs(remoteCmd []string) []string {
 	return args
 }
 
+// RsyncRemote satisfies pkg/transport.RsyncSSH by exposing the
+// ssh-connection bits in a form rsync's `-e "ssh <opts>"` can consume.
+//
+// remote: the user@host (or just host) argument rsync expects on the
+// remote side of its argument list, e.g. "deploy@example.com" — rsync
+// concatenates this with ":<path>" itself.
+//
+// sshOpts: the args to splice in to `-e ssh <opts>` so rsync's ssh
+// invocation uses the same identity file / port / extra options the
+// transport itself uses for Exec/Pipe. The slice does NOT include the
+// `ssh` literal and does NOT include the remote / `--` / command.
+func (s *sshTransport) RsyncRemote() (string, []string) {
+	var opts []string
+	if s.cfg.Port != 0 {
+		opts = append(opts, "-p", strconv.Itoa(s.cfg.Port))
+	}
+	if path := expandIdentityPath(s.cfg.IdentityFile); path != "" {
+		opts = append(opts, "-i", path, "-o", "IdentitiesOnly=yes")
+	}
+	opts = append(opts, s.cfg.Options...)
+	target := s.cfg.Host
+	if s.cfg.User != "" {
+		target = s.cfg.User + "@" + s.cfg.Host
+	}
+	return target, opts
+}
+
 // expandIdentityPath turns "~" and "~/" prefixes into absolute paths so
 // the ssh client (which doesn't expand ~ itself for -i) gets a usable
 // path. Empty input returns empty.

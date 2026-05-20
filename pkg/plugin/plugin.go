@@ -25,6 +25,15 @@ const (
 	// with ExitVerbUnsupported or ExitNotSupported; dconsole then falls
 	// back to the standard dump+load flow.
 	VerbSyncTo = "sync-to"
+	// VerbSyncFilesTo is the sibling of VerbSyncTo for rsync: a provider
+	// takes over the entire `dconsole rsync @src @dst` end-to-end (e.g.
+	// Skpr's image-pull which contains both DB and assets). Plugins that
+	// don't implement it return ExitVerbUnsupported / ExitNotSupported.
+	VerbSyncFilesTo = "sync-files-to"
+	// VerbLoadFiles consumes a local asset bundle and loads it into the
+	// target (the rsync equivalent of VerbLoadFor). Plugins receive
+	// --bundle-path=<file> and read the gzipped tarball at that path.
+	VerbLoadFiles = "load-files"
 )
 
 // Exit codes. Plugins MUST use these for the documented conditions;

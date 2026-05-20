@@ -102,6 +102,20 @@ func (d *ddevTransport) ImportDB(ctx context.Context, a *alias.Alias, dumpPath s
 	return cmd.Run()
 }
 
+// ImportFiles satisfies pkg/transport.FilesImporter via
+// `ddev import-files --src=<bundle>`. ddev accepts .tar.gz, .tar,
+// .zip, or a directory; our cache .tar.gz works directly. Runs with
+// Cmd.Dir at the approot so ddev finds .ddev/config.yaml.
+func (d *ddevTransport) ImportFiles(ctx context.Context, a *alias.Alias, bundlePath string) error {
+	cmd := exec.CommandContext(ctx, "ddev", "import-files", "--src="+bundlePath)
+	cmd.Dir = d.approot
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	dlog.Cmdf(cmd.Args)
+	return cmd.Run()
+}
+
 func (d *ddevTransport) Shell(ctx context.Context, workDir string) error {
 	args := []string{"ssh"}
 	if d.cfg.Service != "" {

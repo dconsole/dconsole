@@ -27,6 +27,17 @@ type Provider interface {
 	// Providers that just supply dumps return ErrNotSupported and
 	// dconsole falls back to DumpFor / LoadFor.
 	SyncTo(ctx context.Context, source, target *alias.Alias) error
+	// SyncFilesTo is the rsync-equivalent of SyncTo: take over the
+	// entire `dconsole rsync @src @dst` end-to-end. Providers whose
+	// image already contains assets (Skpr) return nil; providers that
+	// only ship asset bundles return ErrNotSupported (then dconsole
+	// falls back to FilesDownload + LoadFilesFor).
+	SyncFilesTo(ctx context.Context, source, target *alias.Alias) error
+	// LoadFilesFor consumes a local asset bundle (tar.gz directory)
+	// and loads it into `a`. Most providers won't implement this;
+	// dconsole falls back to transport.FilesImporter (ddev import-files)
+	// or a tar-stream unpack via the target transport.
+	LoadFilesFor(ctx context.Context, a *alias.Alias, bundlePath string) error
 	// DumpFor returns a local path to a database dump for `a`. The
 	// returned cleanup function is called by the orchestrator when the
 	// dump is no longer needed.

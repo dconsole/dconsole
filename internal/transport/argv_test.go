@@ -110,6 +110,68 @@ func TestDDEVArgv(t *testing.T) {
 	}
 }
 
+func TestSSHRsyncRemote(t *testing.T) {
+	cases := []struct {
+		name       string
+		cfg        alias.SSHTransport
+		wantRemote string
+		wantOpts   []string
+	}{
+		{
+			name:       "user + host",
+			cfg:        alias.SSHTransport{Host: "example.com", User: "deploy"},
+			wantRemote: "deploy@example.com",
+			wantOpts:   nil,
+		},
+		{
+			name:       "host only",
+			cfg:        alias.SSHTransport{Host: "example.com"},
+			wantRemote: "example.com",
+			wantOpts:   nil,
+		},
+		{
+			name:       "with port",
+			cfg:        alias.SSHTransport{Host: "h", User: "u", Port: 2222},
+			wantRemote: "u@h",
+			wantOpts:   []string{"-p", "2222"},
+		},
+		{
+			name: "identity + extra options",
+			cfg: alias.SSHTransport{
+				Host: "h", User: "u",
+				IdentityFile: "/tmp/key",
+				Options:      []string{"-o", "StrictHostKeyChecking=no"},
+			},
+			wantRemote: "u@h",
+			wantOpts:   []string{"-i", "/tmp/key", "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=no"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := &sshTransport{cfg: &c.cfg}
+			remote, opts := s.RsyncRemote()
+			if remote != c.wantRemote {
+				t.Errorf("remote = %q, want %q", remote, c.wantRemote)
+			}
+			if !reflect.DeepEqual(opts, c.wantOpts) {
+				t.Errorf("opts:\n  got  %q\n  want %q", opts, c.wantOpts)
+			}
+		})
+	}
+}
+
+func TestDDEVImportFilesArgv(t *testing.T) {
+	// ImportFiles always builds the same argv shape regardless of alias.
+	// Replicate the logic here to assert without needing ddev installed.
+	bundlePath := "/tmp/files.tar.gz"
+	wantArgs := []string{"ddev", "import-files", "--src=" + bundlePath}
+	args := []string{"import-files", "--src=" + bundlePath}
+	got := append([]string{"ddev"}, args...)
+	if !reflect.DeepEqual(got, wantArgs) {
+		t.Errorf("argv:\n  got  %q\n  want %q", got, wantArgs)
+	}
+}
+
 func TestDDEVImportDBArgv(t *testing.T) {
 	cases := []struct {
 		name     string

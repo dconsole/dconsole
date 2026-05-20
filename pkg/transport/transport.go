@@ -25,6 +25,26 @@ type DBImporter interface {
 	ImportDB(ctx context.Context, a *alias.Alias, dumpPath string) error
 }
 
+// FilesImporter is the asset-bundle sibling of DBImporter. The rsync
+// orchestrator type-asserts each target transport against this when
+// loading a provider-supplied bundle, preferring it over the
+// tar-stream-unpack fallback. ddev implements via `ddev import-files`.
+//
+// bundlePath is a local path to a gzipped tarball of the files tree
+// (relative paths inside the archive map to the target's files dir).
+type FilesImporter interface {
+	ImportFiles(ctx context.Context, a *alias.Alias, bundlePath string) error
+}
+
+// RsyncSSH is an optional capability a Transport implements when it
+// represents an ssh-reachable endpoint suitable for the rsync binary.
+// `remote` is the user@host:port-or-host argument; `sshOpts` is the
+// arg slice for `-e "ssh <opts>"` (identity file, options, etc.).
+// Used only by the rsync mode and the auto-mode strategy chain.
+type RsyncSSH interface {
+	RsyncRemote() (remote string, sshOpts []string)
+}
+
 // Transport reaches a remote environment described by an Alias. Each
 // implementation wraps a CLI on $PATH (ssh, docker, kubectl, ddev, …) or
 // proxies to a subprocess plugin.

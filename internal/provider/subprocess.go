@@ -74,6 +74,69 @@ func (s *subprocessProvider) Login(ctx context.Context, a *alias.Alias) error {
 	return nil
 }
 
+// SyncFilesTo is the rsync sibling of SyncTo. Same shape: two alias
+// envelopes; the plugin runs whatever end-to-end file-sync it wants.
+func (s *subprocessProvider) SyncFilesTo(ctx context.Context, source, target *alias.Alias) error {
+	return s.dispatchTwoAlias(ctx, plugin.VerbSyncFilesTo, source, target)
+}
+
+// LoadFilesFor consumes a local asset bundle (tar.gz). Plugin receives
+// --alias-json=<target> and --bundle-path=<file>.
+func (s *subprocessProvider) LoadFilesFor(ctx context.Context, a *alias.Alias, bundlePath string) error {
+	envelopePath, cleanup, err := writeProviderEnvelope(a)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	c := exec.CommandContext(ctx, s.bin, plugin.VerbLoadFiles, "--alias-json="+envelopePath, "--bundle-path="+bundlePath)
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	if err := c.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			switch exitErr.ExitCode() {
+			case plugin.ExitVerbUnsupported, plugin.ExitNotSupported:
+				return ErrNotSupported
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+// dispatchTwoAlias is the shared spawn-with-source-and-target shape
+// used by both SyncTo and SyncFilesTo.
+func (s *subprocessProvider) dispatchTwoAlias(ctx context.Context, verb string, source, target *alias.Alias) error {
+	srcPath, srcCleanup, err := writeProviderEnvelope(source)
+	if err != nil {
+		return err
+	}
+	defer srcCleanup()
+	tgtPath, tgtCleanup, err := writeProviderEnvelope(target)
+	if err != nil {
+		return err
+	}
+	defer tgtCleanup()
+	c := exec.CommandContext(ctx, s.bin, verb,
+		"--alias-json="+srcPath,
+		"--target-alias-json="+tgtPath,
+	)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	if err := c.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			switch exitErr.ExitCode() {
+			case plugin.ExitVerbUnsupported, plugin.ExitNotSupported:
+				return ErrNotSupported
+			}
+		}
+		return fmt.Errorf("plugin dconsole-%s %s: %w", s.typ, verb, err)
+	}
+	return nil
+}
+
 // SyncTo dispatches the optional sync-to verb so plugin providers can
 // take over the whole sql:sync (e.g. Skpr's "pull a pre-built image and
 // rebuild" pattern). The target alias is plumbed via a second
