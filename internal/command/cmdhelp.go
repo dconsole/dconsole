@@ -173,7 +173,7 @@ Examples:
 // sqlSyncSpec describes `dconsole sql:sync`.
 var sqlSyncSpec = CommandSpec{
 	Name:        "sql:sync",
-	Description: "Dump a source database, then import it into a target database (transport-agnostic).",
+	Description: "Dump a source database, then import it into a target database (transport-agnostic, cached, transport/provider-aware).",
 	Usage: []string{
 		"dconsole sql:sync <@source.env> <@target.env> [options]",
 	},
@@ -184,21 +184,54 @@ var sqlSyncSpec = CommandSpec{
 	Options: []OptionSpec{
 		{Long: "force", Description: "Bypass per-env sync_policy / allow_sync_* checks."},
 		{Long: "keep-dump", Description: "Keep the temporary dump file after import (for debugging)."},
-		{Long: "dump-path", ValueName: "PATH", Description: "Write the dump to PATH instead of an OS temp file (implies --keep-dump-style behaviour)."},
+		{Long: "dump-path", ValueName: "PATH", Description: "Write the dump to PATH instead of an OS temp file. Disables caching for the run."},
+		{Long: "refresh", Description: "Invalidate the cached dump and re-fetch (then re-cache)."},
+		{Long: "no-cache", Description: "Bypass the cache entirely: don't read, don't write."},
+		{Long: "cache-ttl", ValueName: "DUR", Description: "Override the cache freshness window (default 24h or alias.sql.cache.ttl). Go duration string, e.g. 6h, 30m."},
+		{Long: "structure-tables", ValueName: "LIST", Description: "Comma-separated table names (globs OK) to dump schema-only. Overrides alias.sql.source.structure_tables."},
+		{Long: "structure-tables-key", ValueName: "KEY", Description: "Reference a named structure-tables array from drush config (e.g. common). Overrides alias.sql.source.structure_tables_key."},
+		{Long: "source-database", ValueName: "KEY", Description: "Drush DB connection key to dump FROM. Defaults to default (or alias.sql.source.database)."},
+		{Long: "target-database", ValueName: "KEY", Description: "Drush DB connection key to load INTO. Defaults to default (or alias.sql.target.database). Forwarded to drush sql:cli and ddev import-db."},
+		{Long: "confirm-cross-site", Description: "Bypass the interactive prompt when source.Site != target.Site. Intended for CI; deliberately NOT aliased to --yes/-y."},
 	},
 	Help: `dconsole obtains the dump using (in priority order):
-  1. The source's configured provider, if it implements DumpFor.
-  2. The source's alias.sql.source.type (drush | file | docker_cp).
-  3. The default — drush sql:dump --gzip via the source's transport.
+  1. provider.SyncTo on the source (full end-to-end takeover, e.g. Skpr image-pull).
+  2. The cached dump for this (alias, strategy, DB, structure-tables) tuple,
+     if fresh under the effective TTL.
+  3. provider.DumpFor on the source.
+  4. alias.sql.source.type (drush | file | docker_cp).
+  5. Default — drush sql:dump --gzip [--database=…] [--structure-tables-*] via
+     the source's transport. Compression happens AT THE SOURCE so the wire
+     only carries gzipped bytes.
 
-The dump is then imported into the target via drush sql:cli (or the target
-provider's LoadFor, if implemented). Per-env policies (sync_policy,
-allow_sync_from / allow_sync_to) are enforced before the dump starts.
+Load priority:
+  1. provider.LoadFor on the target.
+  2. Target transport's native DBImporter (ddev import-db; faster than drush).
+  3. drush sql:cli pipe with --database=<target-db> if configured.
+
+Cache: $XDG_CACHE_HOME/dconsole/sql/<key>.sql.gz keyed by site+env+strategy
++source-database+structure-tables. Default TTL is 24h. Per-alias override
+via alias.sql.cache.ttl; --cache-ttl=DUR overrides for a single run.
+
+Cross-site safety: when source.Site != target.Site, dconsole prompts you
+to type the target site name before proceeding (or aborts in scripts
+without --confirm-cross-site). The check runs BEFORE the policy gate,
+so habitual --force use cannot bypass it.
+
+Manage the cache with:
+  dconsole sql:cache list             # show all cached dumps
+  dconsole sql:cache clear            # purge the entire cache
+  dconsole sql:cache clear @prod.live # purge only entries for one alias
 
 Examples:
   dconsole sql:sync @prod.live @dev.local
-  dconsole sql:sync @prod.live @stage.test --force --keep-dump
-  dconsole sql:sync @prod.live @dev.local --dump-path=/tmp/prod-dump.sql.gz`,
+  dconsole sql:sync @prod.live @dev.local --refresh
+  dconsole sql:sync @prod.live @dev.local --cache-ttl=6h
+  dconsole sql:sync @prod.live @stage.test --force --confirm-cross-site
+  dconsole sql:sync @prod.live @dev.local --structure-tables=cache,sessions,watchdog
+  dconsole sql:sync @prod.live @dev.local --structure-tables-key=common
+  dconsole sql:sync @naa.prod @naa.local --target-database=migrate
+  dconsole sql:sync @prod.live @dev.local --dump-path=/tmp/dump.sql.gz --no-cache`,
 }
 
 // RsyncSpec exposes the rsync help spec for the dispatcher.

@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/heydon/dconsole/internal/alias"
 	"github.com/heydon/dconsole/internal/command"
@@ -60,6 +61,8 @@ func run(ctx context.Context, args []string) error {
 		return command.TransportList(os.Stdout)
 	case "sql:sync":
 		return runSqlSync(ctx, loader, args[1:])
+	case "sql:cache":
+		return runSqlCache(args[1:], os.Stdout)
 	case "rsync":
 		return runRsync(ctx, loader, args[1:])
 	case "alias:convert":
@@ -313,28 +316,91 @@ func runSqlSync(ctx context.Context, loader *alias.Loader, args []string) error 
 	}
 	opts := command.SqlSyncOpts{}
 	var positional []string
+	takeValue := func(i *int, name string) (string, error) {
+		if *i+1 >= len(args) {
+			return "", fmt.Errorf("%s requires an argument", name)
+		}
+		*i++
+		return args[*i], nil
+	}
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
+		a := args[i]
+		switch a {
 		case "--keep-dump":
 			opts.KeepDump = true
 		case "--force":
 			opts.Force = true
+		case "--refresh":
+			opts.Refresh = true
+		case "--no-cache":
+			opts.NoCache = true
+		case "--confirm-cross-site":
+			opts.ConfirmCrossSite = true
 		case "--dump-path":
-			if i+1 >= len(args) {
-				return fmt.Errorf("--dump-path requires an argument")
+			v, err := takeValue(&i, a)
+			if err != nil {
+				return err
 			}
-			i++
-			opts.DumpPath = args[i]
+			opts.DumpPath = v
+		case "--cache-ttl":
+			v, err := takeValue(&i, a)
+			if err != nil {
+				return err
+			}
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				return fmt.Errorf("--cache-ttl: %w", err)
+			}
+			opts.CacheTTL = d
+		case "--source-database":
+			v, err := takeValue(&i, a)
+			if err != nil {
+				return err
+			}
+			opts.SourceDatabase = v
+		case "--target-database":
+			v, err := takeValue(&i, a)
+			if err != nil {
+				return err
+			}
+			opts.TargetDatabase = v
+		case "--structure-tables":
+			v, err := takeValue(&i, a)
+			if err != nil {
+				return err
+			}
+			opts.StructureTables = splitCSV(v)
+		case "--structure-tables-key":
+			v, err := takeValue(&i, a)
+			if err != nil {
+				return err
+			}
+			opts.StructureTablesKey = v
 		default:
-			if strings.HasPrefix(args[i], "--dump-path=") {
-				opts.DumpPath = strings.TrimPrefix(args[i], "--dump-path=")
-				continue
+			switch {
+			case strings.HasPrefix(a, "--dump-path="):
+				opts.DumpPath = strings.TrimPrefix(a, "--dump-path=")
+			case strings.HasPrefix(a, "--cache-ttl="):
+				d, err := time.ParseDuration(strings.TrimPrefix(a, "--cache-ttl="))
+				if err != nil {
+					return fmt.Errorf("--cache-ttl: %w", err)
+				}
+				opts.CacheTTL = d
+			case strings.HasPrefix(a, "--source-database="):
+				opts.SourceDatabase = strings.TrimPrefix(a, "--source-database=")
+			case strings.HasPrefix(a, "--target-database="):
+				opts.TargetDatabase = strings.TrimPrefix(a, "--target-database=")
+			case strings.HasPrefix(a, "--structure-tables="):
+				opts.StructureTables = splitCSV(strings.TrimPrefix(a, "--structure-tables="))
+			case strings.HasPrefix(a, "--structure-tables-key="):
+				opts.StructureTablesKey = strings.TrimPrefix(a, "--structure-tables-key=")
+			default:
+				positional = append(positional, a)
 			}
-			positional = append(positional, args[i])
 		}
 	}
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: dconsole sql:sync @source.env @target.env [--keep-dump] [--dump-path PATH] [--force]\n  run `dconsole sql:sync --help` for the full reference")
+		return fmt.Errorf("usage: dconsole sql:sync @source.env @target.env [flags]\n  run `dconsole sql:sync --help` for the full reference")
 	}
 	source, err := loader.ResolveRef(positional[0])
 	if err != nil {
@@ -345,6 +411,39 @@ func runSqlSync(ctx context.Context, loader *alias.Loader, args []string) error 
 		return fmt.Errorf("target: %w", err)
 	}
 	return command.SqlSync(ctx, source, target, os.Stdout, os.Stdin, opts)
+}
+
+// splitCSV splits a comma-separated list, trimming whitespace and
+// dropping empty entries.
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := parts[:0]
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// runSqlCache dispatches `dconsole sql:cache <list|clear> [@alias]`.
+func runSqlCache(args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: dconsole sql:cache <list|clear> [@site.env]")
+	}
+	sub, rest := args[0], args[1:]
+	switch sub {
+	case "list":
+		return command.SqlCacheList(out)
+	case "clear":
+		query := ""
+		if len(rest) > 0 {
+			query = rest[0]
+		}
+		return command.SqlCacheClear(query, out)
+	}
+	return fmt.Errorf("unknown sql:cache subcommand %q (want list, clear)", sub)
 }
 
 func printUsage(w io.Writer) {
