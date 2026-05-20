@@ -104,6 +104,143 @@ func TestLoadManifest_MissingProjectInfersFromDir(t *testing.T) {
 	}
 }
 
+// TestLoadManifest_OverrideChangesDefaultEnv covers the deploy-time
+// pattern: server has dconsole.yml describing the project's envs and
+// a tiny dconsole.override.yml that flips default_env to whatever this
+// server represents. No alias prefix needed when you're on the box.
+func TestLoadManifest_OverrideChangesDefaultEnv(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "dconsole.yml")
+	override := filepath.Join(dir, "dconsole.override.yml")
+	mustWrite(t, base, `
+project: demo
+default_env: dev
+dev:
+  uri: https://dev.example.com
+  transport: { type: ssh, ssh: { host: dev } }
+prod:
+  uri: https://www.example.com
+  transport: { type: ssh, ssh: { host: prod } }
+`)
+	mustWrite(t, override, "default_env: prod\n")
+
+	m, err := LoadManifest(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.DefaultEnv != "prod" {
+		t.Errorf("DefaultEnv = %q, want %q (override should win)", m.DefaultEnv, "prod")
+	}
+	if m.Project != "demo" {
+		t.Errorf("Project = %q, want demo (base owns the name)", m.Project)
+	}
+	if m.OverridePath == "" {
+		t.Errorf("OverridePath should be set when override file is loaded")
+	}
+}
+
+// TestLoadManifest_OverrideSwitchesEnvTransport covers the
+// "deployed inside a container" pattern: the same env that's normally
+// reached via ssh becomes a local exec transport.
+func TestLoadManifest_OverrideSwitchesEnvTransport(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "dconsole.yml")
+	override := filepath.Join(dir, "dconsole.override.yml")
+	mustWrite(t, base, `
+project: demo
+prod:
+  uri: https://www.example.com
+  root: /var/www/myapp/web
+  transport:
+    type: ssh
+    ssh:
+      host: prod.example.com
+      user: deploy
+`)
+	mustWrite(t, override, `
+prod:
+  transport:
+    type: exec
+    exec:
+      dir: /var/www/myapp/web
+`)
+
+	m, err := LoadManifest(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prod, err := m.ResolveEnv("prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prod.Transport.Type != "exec" {
+		t.Errorf("Transport.Type = %q, want exec (override should replace ssh)", prod.Transport.Type)
+	}
+	if prod.URI != "https://www.example.com" {
+		t.Errorf("URI lost: %q (base value should survive)", prod.URI)
+	}
+	if prod.Root != "/var/www/myapp/web" {
+		t.Errorf("Root lost: %q", prod.Root)
+	}
+}
+
+// TestLoadManifest_OverrideAddsNewEnv lets ops introduce a new env via
+// override (e.g. a container-local "self" alias) without touching the
+// shared dconsole.yml.
+func TestLoadManifest_OverrideAddsNewEnv(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "dconsole.yml")
+	override := filepath.Join(dir, "dconsole.override.yml")
+	mustWrite(t, base, `
+project: demo
+prod:
+  uri: https://www.example.com
+  transport: { type: ssh, ssh: { host: prod } }
+`)
+	mustWrite(t, override, `
+self:
+  uri: https://internal.example.com
+  root: /var/www/myapp/web
+  transport:
+    type: exec
+    exec:
+      dir: /var/www/myapp/web
+`)
+
+	m, err := LoadManifest(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.Envs["self"]; !ok {
+		t.Errorf("override env 'self' not added; have: %v", m.EnvNames())
+	}
+	if _, ok := m.Envs["prod"]; !ok {
+		t.Errorf("base env 'prod' lost after override merge")
+	}
+}
+
+// TestLoadManifest_OverrideAbsentNoError confirms an absent override
+// file is silently OK (no error, OverridePath stays empty).
+func TestLoadManifest_OverrideAbsentNoError(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "dconsole.yml")
+	mustWrite(t, base, "project: demo\nprod: { uri: x }\n")
+	m, err := LoadManifest(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.OverridePath != "" {
+		t.Errorf("OverridePath = %q, want empty", m.OverridePath)
+	}
+}
+
+func mustWrite(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLoadManifest_ExplicitProjectWins(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "dir-name")

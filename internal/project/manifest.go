@@ -18,6 +18,13 @@ import (
 // ManifestName is the filename dconsole looks for at a repo root.
 const ManifestName = "dconsole.yml"
 
+// OverrideManifestName is the optional file that layers field-by-field
+// changes on top of the base manifest. Useful when dconsole is deployed
+// to a server or inside a container: a tiny override can change
+// default_env and switch one env's transport to `exec` without forking
+// the committed dconsole.yml.
+const OverrideManifestName = "dconsole.override.yml"
+
 // Manifest is the parsed dconsole.yml file. It declares a project name
 // and the envs that belong to it. The YAML format is flat: `project:`
 // names the project, `_defaults:` optionally provides per-env defaults,
@@ -33,12 +40,42 @@ type Manifest struct {
 	// AbsPath is the absolute path to the dconsole.yml the manifest was
 	// loaded from. Populated by LoadManifest; not part of the YAML.
 	AbsPath string
+	// OverridePath is the absolute path of the dconsole.override.yml
+	// that was layered on top, or "" if no override existed.
+	OverridePath string
 }
 
-// LoadManifest reads and parses a dconsole.yml at `path`. The flat format
-// is: every top-level key is an env, except `project` (required) and
-// `_defaults` (optional).
+// LoadManifest reads and parses a dconsole.yml at `path`. If a
+// dconsole.override.yml sits next to it, that file is layered on top
+// field-by-field — useful for per-machine / per-deployment config that
+// shouldn't be committed.
 func LoadManifest(path string) (*Manifest, error) {
+	m, err := loadManifestFile(path, manifestLoadOpts{requireEnvs: true, inferProject: true})
+	if err != nil {
+		return nil, err
+	}
+	overridePath := filepath.Join(filepath.Dir(m.AbsPath), OverrideManifestName)
+	if _, statErr := os.Stat(overridePath); statErr == nil {
+		ov, err := loadManifestFile(overridePath, manifestLoadOpts{requireEnvs: false, inferProject: false})
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", overridePath, err)
+		}
+		mergeOverride(m, ov)
+		m.OverridePath = ov.AbsPath
+	}
+	return m, nil
+}
+
+// manifestLoadOpts controls relaxed-mode parsing for override files
+// (which legitimately omit project: and envs:).
+type manifestLoadOpts struct {
+	requireEnvs  bool
+	inferProject bool
+}
+
+// loadManifestFile parses one YAML file into a Manifest. Used for both
+// the base manifest (strict) and the override (relaxed).
+func loadManifestFile(path string, opts manifestLoadOpts) (*Manifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -55,7 +92,7 @@ func LoadManifest(path string) (*Manifest, error) {
 			return nil, fmt.Errorf("%s: project: %w", path, err)
 		}
 	}
-	if m.Project == "" {
+	if m.Project == "" && opts.inferProject {
 		// Default to the manifest's parent directory name. Mirrors how
 		// npm / composer / cargo default a project name when the file
 		// lives in a directory named after the project — avoids a
@@ -90,7 +127,7 @@ func LoadManifest(path string) (*Manifest, error) {
 		}
 		m.Envs[k] = a
 	}
-	if len(m.Envs) == 0 {
+	if opts.requireEnvs && len(m.Envs) == 0 {
 		return nil, fmt.Errorf("%s: no envs declared (every top-level key besides `project:` and `_defaults:` is treated as an env name)", path)
 	}
 	abs, err := filepath.Abs(path)
@@ -99,6 +136,35 @@ func LoadManifest(path string) (*Manifest, error) {
 	}
 	m.AbsPath = abs
 	return m, nil
+}
+
+// mergeOverride layers ov's non-empty fields on top of base in place:
+//
+//   - default_env wins from ov if set.
+//   - _defaults merges field-by-field via alias.MergeDefaults.
+//   - For each env that exists in both, ov's values override base's
+//     per field (same MergeDefaults semantics).
+//   - Envs only present in ov are added verbatim.
+//
+// project is intentionally NOT overridden — the base file owns the
+// project's identity. If callers really need to rename the project at
+// the override layer they can edit dconsole.yml directly.
+func mergeOverride(base, ov *Manifest) {
+	if ov.DefaultEnv != "" {
+		base.DefaultEnv = ov.DefaultEnv
+	}
+	// alias.MergeDefaults(defaults, a) returns a with defaults filled in
+	// where a was empty — i.e. a wins where it has a value. For the
+	// override we want ov to win where set, with base as the fallback,
+	// so we call MergeDefaults(base, ov).
+	base.Defaults = alias.MergeDefaults(base.Defaults, ov.Defaults)
+	for name, ovEnv := range ov.Envs {
+		if existing, ok := base.Envs[name]; ok {
+			base.Envs[name] = alias.MergeDefaults(existing, ovEnv)
+		} else {
+			base.Envs[name] = ovEnv
+		}
+	}
 }
 
 // FindManifest walks up from `start` looking for a dconsole.yml. Returns

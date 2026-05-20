@@ -55,6 +55,9 @@ func Inspect(ctx context.Context, loader *alias.Loader, args []string, out io.Wr
 	fmt.Fprintln(out, "─── alias ─────────────────────────────────────────────")
 	fmt.Fprintf(out, "  ref:       @%s.%s\n", a.Site, a.Env)
 	fmt.Fprintf(out, "  source:    %s\n", res.Source)
+	if m, _ := findProjectManifest(); m != nil && m.OverridePath != "" {
+		fmt.Fprintf(out, "  override:  %s\n", m.OverridePath)
+	}
 	if a.URI != "" {
 		fmt.Fprintf(out, "  uri:       %s\n", a.URI)
 	}

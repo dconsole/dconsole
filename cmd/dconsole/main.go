@@ -381,5 +381,12 @@ Aliases come from (in priority order):
   $XDG_CONFIG_HOME/dconsole/sites/*.site.yml
   ~/.dconsole/sites/*.site.yml
   ~/.dconsole/projects.yml  (auto-managed via project:register)
+
+Per-machine overrides:
+  When a dconsole.override.yml exists next to dconsole.yml, its fields
+  layer on top of the base manifest: default_env, _defaults, and each
+  named env merge field-by-field with the override winning. Useful for
+  deployments where the same project should resolve default_env to the
+  current server's env and switch the transport to exec.
 `))
 }
