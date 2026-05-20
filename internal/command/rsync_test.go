@@ -42,7 +42,10 @@ func TestRsyncAliasToLocal_FilesToken(t *testing.T) {
 	// The fake also handles invocation as the absolute path (the
 	// remotebin layer passes the resolved absolute path).
 	fakeBin := filepath.Join(dir, "fake-drush")
+	// Strip leading --root= and --uri= args (sitepath now prepends them
+	// so drush 8 can bootstrap). Then dispatch on the real subcommand.
 	script := `#!/bin/sh
+while [ "${1#--root=}" != "$1" ] || [ "${1#--uri=}" != "$1" ]; do shift; done
 case "$1" in
   status)
     printf '{"root":"` + remoteRoot + `","files":"` + remoteFiles + `","site":"sites/default"}'

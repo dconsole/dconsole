@@ -30,12 +30,16 @@ func TestRenderCommandHelp_RsyncSpec(t *testing.T) {
 		}
 		prev = idx
 	}
-	// Each argument and option should be listed.
+	// Each argument and option should be listed. (%root is no longer a
+	// first-class pathspec for the orchestrator; freeform paths cover
+	// it via the legacy branch.)
 	for _, needle := range []string{
 		"src", "dst",
 		"-v, --verbose",
 		"--force",
-		"%files", "%root", "%private",
+		"--mode", "--include-private", "--confirm-cross-site",
+		"%files", "%private",
+		"stage-file-proxy",
 	} {
 		if !strings.Contains(got, needle) {
 			t.Errorf("output missing %q", needle)

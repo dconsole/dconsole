@@ -143,31 +143,87 @@ func columnWidth(s CommandSpec) int {
 // rsyncSpec describes `dconsole rsync`.
 var rsyncSpec = CommandSpec{
 	Name:        "rsync",
-	Description: "Copy %files / %root / %private / abs paths between aliases via a transport-agnostic tar stream.",
+	Description: "Sync assets between aliases — auto-mode picks the best rsync path; cross-site safety; Stage File Proxy fallback.",
 	Usage: []string{
-		"dconsole rsync <src> <dst> [options]",
+		"dconsole rsync <@source> <@target> [options]      # orchestrator (default for alias-to-alias %files/%private)",
+		"dconsole rsync <src> <dst> [options]              # legacy tar-stream for freeform endpoints",
 	},
 	Args: []ArgSpec{
-		{Name: "src", Description: "Source endpoint: @site.env:%files, @site.env:%root, @site.env:%private, @site.env:/abs/path, or ./local/path."},
+		{Name: "src", Description: "Source endpoint: @site.env (orchestrator) | @site.env:%files | @site.env:%private | @site.env:/abs/path | ./local/path."},
 		{Name: "dst", Description: "Destination endpoint in the same form as src."},
 	},
 	Options: []OptionSpec{
 		{Short: "v", Long: "verbose", Description: "Print progress as files transfer."},
 		{Long: "force", Description: "Bypass per-env sync_policy / allow_sync_* checks."},
+		{Long: "mode", ValueName: "MODE", Description: "auto (default) | rsync | diff | stage-file-proxy. See Help for details."},
+		{Long: "proxy", Description: "Shortcut for --mode=stage-file-proxy."},
+		{Long: "include-private", Description: "Also sync %private alongside %files (orchestrator mode only)."},
+		{Long: "pathspec", ValueName: "LIST", Description: "Comma-separated pathspecs (overrides --include-private). e.g. %files,%private"},
+		{Long: "delete", Description: "Remove files on target that don't exist on source (off by default)."},
+		{Long: "confirm-cross-site", Description: "Bypass the interactive prompt when source.Site != target.Site (CI). Not aliased to --yes."},
+		{Long: "refresh", Description: "Invalidate the cached provider-supplied bundle and re-fetch."},
+		{Long: "no-cache", Description: "Bypass the provider-bundle cache for this run."},
+		{Long: "cache-ttl", ValueName: "DUR", Description: "Override the provider-bundle cache TTL (default 24h or alias.assets.cache.ttl)."},
 	},
-	Help: `Each endpoint is resolved independently via its transport, so source and destination
-don't need to share a transport (e.g. ssh source → ddev destination is fine). The
-copy streams a tar archive end-to-end and never writes a temporary file locally.
+	Help: `dconsole rsync has two branches:
 
-Tokens (must be the first thing after the colon in an alias endpoint):
-  %files     The site's files directory.
-  %root      The Drupal docroot.
-  %private   The site's private files directory (if configured).
+  - Orchestrator (both endpoints alias-bound + pathspec is %files/%private):
+    Cross-site safety, provider hooks, mode dispatch. See "Modes" below.
+
+  - Legacy tar-stream (anything else — freeform paths, local endpoints):
+    Tar-stream the source → tar-untar at the destination via transport.Pipe.
+    The existing behaviour, unchanged.
+
+Modes (orchestrator only):
+
+  auto (default) — walks the rsync priority chain top to bottom; first
+    match wins; falls through to diff+tar if none apply:
+    1. same-host rsync (both ends share the same ssh endpoint).
+    2. local-mediated rsync (laptop pulls from ssh source, pushes to target).
+    3. source-driven rsync (source ssh's INTO target with agent forwarded).
+    4. diff+tar fallback (find-on-both-ends; tar-pipe changed files only).
+    Strategy chosen is logged at -v.
+
+  rsync — force a real rsync invocation. Tries strategies 1-3; fails
+    loudly if none of the rsync paths apply. Use when you want to know
+    rsync was actually used (not falling through to diff).
+
+  diff — skip rsync attempts entirely; use the universal diff+tar
+    approach. Works through any transport (ssh, ddev, docker, …).
+
+  stage-file-proxy — skip pulling entirely. Enable + configure the
+    Stage File Proxy contributed module on the target so missing
+    files lazy-fetch from the source's URI. Two drush commands fire
+    on the target (drush 9+ pm:enable / config:set, with drush 8
+    pm-enable / vset cascade). Source.uri must be set.
+
+Provider hooks fire BEFORE mode dispatch:
+  - provider.SyncFilesTo: end-to-end takeover (Skpr image-pull).
+  - provider.FilesDownload: supplies an asset bundle; dconsole loads
+    it via provider.LoadFilesFor → transport.FilesImporter
+    (ddev import-files) → tar-stream push.
+
+Cache: $XDG_CACHE_HOME/dconsole/assets/<key>.tar.gz holds provider-
+supplied bundles only. rsync and diff modes don't cache (fresh per
+run). Cache key includes pathspec so %files and %private cache
+independently. Manage with:
+
+  dconsole assets:cache list
+  dconsole assets:cache clear            # purge all
+  dconsole assets:cache clear @prod.live # purge one alias
+
+Cross-site safety: when source.Site != target.Site, dconsole prompts
+you to type the target site's name before proceeding. The check is
+BEFORE the policy gate, so habitual --force use can't bypass it.
 
 Examples:
-  dconsole rsync @prod.live:%files ./local-files
-  dconsole rsync ./local-files @stage.test:%files --force
-  dconsole rsync @prod.live:%root/sites/default/files @dev.local:%files`,
+  dconsole rsync @prod @local                           # auto mode, %files only
+  dconsole rsync @prod @local --include-private         # %files + %private
+  dconsole rsync @prod @local --mode=diff               # force diff+tar
+  dconsole rsync @prod @local --mode=rsync              # force rsync, fail if impossible
+  dconsole rsync @prod @local --mode=stage-file-proxy   # configure proxy, no transfer
+  dconsole rsync @prod @local --delete --confirm-cross-site
+  dconsole rsync @prod.live:%files ./local-files        # legacy freeform`,
 }
 
 // sqlSyncSpec describes `dconsole sql:sync`.

@@ -46,7 +46,17 @@ func Resolve(ctx context.Context, a *alias.Alias, bin *remotebin.Resolved, r Run
 		memo.put(key, p)
 		return p, nil
 	}
-	out, err := r.Run(ctx, bin.Argv([]string{"status", "--format=json"}))
+	// Drush 8 won't bootstrap a Drupal site without --root (and usually
+	// --uri); same fix the command package applies via
+	// augmentDrushContext. Inlined here to avoid an import cycle.
+	statusArgs := []string{"status", "--format=json"}
+	if a.Root != "" {
+		statusArgs = append([]string{"--root=" + a.Root}, statusArgs...)
+	}
+	if a.URI != "" {
+		statusArgs = append([]string{"--uri=" + a.URI}, statusArgs...)
+	}
+	out, err := r.Run(ctx, bin.Argv(statusArgs))
 	if err != nil {
 		return nil, fmt.Errorf("`%s status --format=json` failed: %w", bin.Kind, err)
 	}
@@ -64,6 +74,18 @@ func Resolve(ctx context.Context, a *alias.Alias, bin *remotebin.Resolved, r Run
 	// preserved. Normalize to absolute.
 	p.Files = absolutize(p.Root, p.Files)
 	p.Private = absolutize(p.Root, p.Private)
+
+	// drush status only reports the files path when Drupal is bootstrapped
+	// (DB up, settings.php loaded). On a fresh target (no DB yet —
+	// common when rsync runs BEFORE sql:sync) the field is empty. Apply
+	// the Drupal convention default so the upcoming rsync can still
+	// resolve a target path. (Private has no safe default — Drupal
+	// requires explicit configuration — so we leave it empty.)
+	if p.Files == "" && p.Root != "" && p.Site != "" {
+		p.Files = absolutize(p.Root, p.Site+"/files")
+	} else if p.Files == "" && p.Root != "" {
+		p.Files = absolutize(p.Root, "sites/default/files")
+	}
 
 	if p.Root == "" {
 		return nil, fmt.Errorf("remote status did not include a root path")

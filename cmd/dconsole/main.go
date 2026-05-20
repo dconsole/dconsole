@@ -70,6 +70,8 @@ func run(ctx context.Context, args []string) error {
 		return runSqlSync(ctx, loader, args[1:])
 	case "sql:cache":
 		return runSqlCache(args[1:], os.Stdout)
+	case "assets:cache":
+		return runAssetsCache(args[1:], os.Stdout)
 	case "rsync":
 		return runRsync(ctx, loader, args[1:])
 	case "alias:convert":
@@ -292,18 +294,73 @@ func runRsync(ctx context.Context, loader *alias.Loader, args []string) error {
 	}
 	opts := command.RsyncOpts{}
 	var positional []string
-	for _, arg := range args {
-		switch arg {
+	takeValue := func(i *int, name string) (string, error) {
+		if *i+1 >= len(args) {
+			return "", fmt.Errorf("%s requires an argument", name)
+		}
+		*i++
+		return args[*i], nil
+	}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch a {
 		case "-v", "--verbose":
 			opts.Verbose = true
 		case "--force":
 			opts.Force = true
+		case "--include-private":
+			opts.IncludePrivate = true
+		case "--delete":
+			opts.Delete = true
+		case "--confirm-cross-site":
+			opts.ConfirmCrossSite = true
+		case "--refresh":
+			opts.Refresh = true
+		case "--no-cache":
+			opts.NoCache = true
+		case "--proxy":
+			opts.Mode = "stage-file-proxy"
+		case "--mode":
+			v, err := takeValue(&i, a)
+			if err != nil {
+				return err
+			}
+			opts.Mode = v
+		case "--pathspec":
+			v, err := takeValue(&i, a)
+			if err != nil {
+				return err
+			}
+			opts.PathspecOverride = splitCSV(v)
+		case "--cache-ttl":
+			v, err := takeValue(&i, a)
+			if err != nil {
+				return err
+			}
+			d, err := time.ParseDuration(v)
+			if err != nil {
+				return fmt.Errorf("--cache-ttl: %w", err)
+			}
+			opts.CacheTTL = d
 		default:
-			positional = append(positional, arg)
+			switch {
+			case strings.HasPrefix(a, "--mode="):
+				opts.Mode = strings.TrimPrefix(a, "--mode=")
+			case strings.HasPrefix(a, "--pathspec="):
+				opts.PathspecOverride = splitCSV(strings.TrimPrefix(a, "--pathspec="))
+			case strings.HasPrefix(a, "--cache-ttl="):
+				d, err := time.ParseDuration(strings.TrimPrefix(a, "--cache-ttl="))
+				if err != nil {
+					return fmt.Errorf("--cache-ttl: %w", err)
+				}
+				opts.CacheTTL = d
+			default:
+				positional = append(positional, a)
+			}
 		}
 	}
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: dconsole rsync <src> <dst> [--force]\n  src/dst = @site.env:%%files (or %%root/%%private/abs-path), or ./local/path\n  run `dconsole rsync --help` for the full reference")
+		return fmt.Errorf("usage: dconsole rsync <src> <dst> [flags]\n  src/dst = @site.env (orchestrator) | @site.env:%%files / @site.env:%%private | @site.env:/abs/path | ./local/path\n  run `dconsole rsync --help` for the full reference")
 	}
 	src, err := command.ParseEndpoint(positional[0], loader)
 	if err != nil {
@@ -432,6 +489,25 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+// runAssetsCache dispatches `dconsole assets:cache <list|clear> [@alias]`.
+func runAssetsCache(args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: dconsole assets:cache <list|clear> [@site.env]")
+	}
+	sub, rest := args[0], args[1:]
+	switch sub {
+	case "list":
+		return command.AssetsCacheList(out)
+	case "clear":
+		query := ""
+		if len(rest) > 0 {
+			query = rest[0]
+		}
+		return command.AssetsCacheClear(query, out)
+	}
+	return fmt.Errorf("unknown assets:cache subcommand %q (want list, clear)", sub)
 }
 
 // runSqlCache dispatches `dconsole sql:cache <list|clear> [@alias]`.
