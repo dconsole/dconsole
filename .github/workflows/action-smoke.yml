@@ -1,0 +1,43 @@
+name: setup-dconsole smoke test
+
+# Runs after every release is published — installs dconsole on each
+# supported runner OS and verifies the binary launches. Also wired up
+# to workflow_dispatch so we can fire it manually against any tag.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'dconsole version to install (e.g. v0.3.0 or "latest")'
+        required: false
+        default: latest
+
+jobs:
+  install-and-run:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, macos-13, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./
+        id: setup
+        with:
+          version: ${{ inputs.version || github.event.release.tag_name || 'latest' }}
+
+      - name: dconsole resolves on PATH
+        shell: bash
+        run: |
+          which dconsole
+          dconsole --version
+          dconsole --help | head -3
+
+      - name: Output check
+        shell: bash
+        run: |
+          echo "Resolved version: ${{ steps.setup.outputs.version }}"
+          test -n "${{ steps.setup.outputs.version }}"

@@ -60,6 +60,27 @@ Or build from source (requires Go 1.24+):
 go install github.com/dconsole/dconsole/cmd/dconsole@latest
 ```
 
+### In GitHub Actions
+
+The repo doubles as a composite action that installs dconsole on the
+runner and puts it on `$PATH` for subsequent steps:
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dconsole/dconsole@v0.3.0   # installs the matching release
+        # with:
+        #   version: latest              # default; or pin a specific tag
+      - run: dconsole sql:sync @prod @stage --confirm-cross-site
+```
+
+Works on `ubuntu-*`, `macos-*` (Intel and Apple Silicon), and
+`windows-*` runners. Pinning to a specific tag (`@v0.3.0`) is
+recommended over `@latest` for reproducible workflows.
+
 ## Quickstart
 
 1. In your project directory, drop a `<site>.site.yml` with one alias per

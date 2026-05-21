@@ -1,0 +1,98 @@
+name: Setup dconsole
+description: Install the dconsole CLI on the runner and add it to PATH for subsequent workflow steps.
+author: dconsole
+branding:
+  icon: terminal
+  color: blue
+
+inputs:
+  version:
+    description: 'Version to install — a specific tag like "v0.3.0", or "latest" (default).'
+    required: false
+    default: latest
+
+outputs:
+  version:
+    description: 'The resolved dconsole version that was installed (always a concrete tag).'
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - id: install
+      shell: bash
+      env:
+        DCONSOLE_VERSION: ${{ inputs.version }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+
+        VERSION="$DCONSOLE_VERSION"
+
+        # Resolve "latest" via the API. Authenticated to avoid the 60 req/h
+        # unauthenticated rate limit when workflows run often.
+        if [ "$VERSION" = "latest" ]; then
+          VERSION=$(
+            curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/dconsole/dconsole/releases/latest" \
+              | grep -m1 -E '"tag_name"' \
+              | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/'
+          )
+          echo "Resolved latest → $VERSION"
+        fi
+
+        VERSION_NO_V="${VERSION#v}"
+
+        case "$RUNNER_OS" in
+          Linux)   OS=linux ;;
+          macOS)   OS=darwin ;;
+          Windows) OS=windows ;;
+          *) echo "::error::Unsupported RUNNER_OS: $RUNNER_OS"; exit 1 ;;
+        esac
+
+        # macOS ships a single universal binary for both Intel + Apple Silicon.
+        if [ "$OS" = "darwin" ]; then
+          ARCH=all
+        else
+          case "$RUNNER_ARCH" in
+            X64)   ARCH=amd64 ;;
+            ARM64) ARCH=arm64 ;;
+            *) echo "::error::Unsupported RUNNER_ARCH on $OS: $RUNNER_ARCH"; exit 1 ;;
+          esac
+        fi
+
+        if [ "$OS" = "windows" ]; then
+          EXT=zip
+        else
+          EXT=tar.gz
+        fi
+
+        ARCHIVE="dconsole_${VERSION_NO_V}_${OS}_${ARCH}.${EXT}"
+        URL="https://github.com/dconsole/dconsole/releases/download/${VERSION}/${ARCHIVE}"
+        INSTALL_DIR="${RUNNER_TEMP}/dconsole-${VERSION_NO_V}"
+
+        mkdir -p "$INSTALL_DIR"
+        cd "$INSTALL_DIR"
+
+        echo "Installing dconsole ${VERSION} (${OS}/${ARCH})"
+        echo "Source: ${URL}"
+        curl -fsSL --retry 3 -o "$ARCHIVE" "$URL"
+
+        case "$EXT" in
+          zip)    unzip -q "$ARCHIVE" ;;
+          tar.gz) tar -xzf "$ARCHIVE" ;;
+        esac
+        rm -f "$ARCHIVE"
+
+        # Tarballs preserve the exec bit; zip extracts on Windows are .exe so
+        # the chmod is a no-op there. Quiet failure either way.
+        chmod +x dconsole* 2>/dev/null || true
+
+        echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "✓ dconsole ${VERSION} installed to ${INSTALL_DIR}"
+
+    - shell: bash
+      run: dconsole --version
