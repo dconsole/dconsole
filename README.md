@@ -32,29 +32,43 @@ DB pulls and rsync from ssh to ddev.
 
 ## Install
 
-Download a binary for your OS+arch from the
-[releases page](https://github.com/dconsole/dconsole/releases),
-extract, and drop on `$PATH`:
+### Homebrew (macOS, Linux)
 
 ```sh
-# macOS — one universal binary runs on both Intel and Apple Silicon
-curl -L https://github.com/dconsole/dconsole/releases/latest/download/dconsole_0.3.0_darwin_all.tar.gz \
+brew install dconsole/tap/dconsole
+```
+
+`brew upgrade dconsole` picks up new releases automatically. macOS gets
+a single universal binary that runs natively on both Intel and Apple
+Silicon. Linux works on amd64 and arm64 via [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux).
+
+### Pre-built binary (any OS)
+
+Download for your OS+arch from the
+[releases page](https://github.com/dconsole/dconsole/releases),
+extract, drop on `$PATH`:
+
+```sh
+# macOS (Intel + Apple Silicon — one universal binary)
+curl -L https://github.com/dconsole/dconsole/releases/latest/download/dconsole_0.3.2_darwin_all.tar.gz \
   | tar -xz
 mv dconsole ~/.local/bin/
 
-# Linux
-curl -L https://github.com/dconsole/dconsole/releases/latest/download/dconsole_0.3.0_linux_amd64.tar.gz \
+# Linux x86_64
+curl -L https://github.com/dconsole/dconsole/releases/latest/download/dconsole_0.3.2_linux_amd64.tar.gz \
   | tar -xz
 mv dconsole ~/.local/bin/
 ```
 
-Verify:
+Windows users grab the `windows_amd64.zip` archive from the releases page.
+
+Verify the install:
 
 ```sh
 dconsole --version
 ```
 
-Or build from source (requires Go 1.24+):
+### From source (Go 1.24+)
 
 ```sh
 go install github.com/dconsole/dconsole/cmd/dconsole@latest

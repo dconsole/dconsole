@@ -124,14 +124,23 @@ release:
   header: |
     ## dconsole {{.Tag}}
 
-    Cross-platform binaries for darwin/linux/windows on amd64/arm64.
+    Cross-platform binaries for darwin / linux / windows. macOS ships
+    as a single universal binary (Intel + Apple Silicon).
 
     ### Install
 
-    Download the archive for your OS+arch, extract `dconsole` into a directory on `$PATH`, e.g.:
+    **Homebrew (macOS, Linux)**
 
     ```sh
-    tar -xzf dconsole_{{.Version}}_darwin_arm64.tar.gz
+    brew install dconsole/tap/dconsole
+    ```
+
+    **Pre-built binary**
+
+    Pick an archive below for your OS+arch, extract, and drop on `$PATH`:
+
+    ```sh
+    tar -xzf dconsole_{{.Version}}_darwin_all.tar.gz
     mv dconsole ~/.local/bin/
     ```
 
