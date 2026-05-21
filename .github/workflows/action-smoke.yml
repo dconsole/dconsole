@@ -1,25 +1,45 @@
 name: setup-dconsole smoke test
 
-# Runs after every release is published — installs dconsole on each
-# supported runner OS and verifies the binary launches. Also wired up
-# to workflow_dispatch so we can fire it manually against any tag.
+# Validates the composite action end-to-end on every supported runner.
+#
+# Triggers:
+#   - workflow_run: chains off `release` completing successfully. The
+#     more obvious `release: published` trigger DOES NOT fire when the
+#     release is created by another workflow's GITHUB_TOKEN — that's a
+#     GitHub safety mechanism against runaway cascades. workflow_run
+#     does fire in that case, which is what we want.
+#   - workflow_dispatch: manual button for ad-hoc runs against any tag.
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["release"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       version:
-        description: 'dconsole version to install (e.g. v0.3.0 or "latest")'
+        description: 'dconsole version to install (e.g. v0.3.3 or "latest")'
         required: false
         default: latest
 
+env:
+  # Opt into Node.js 24 — silences the per-run deprecation warning for
+  # the JS-based actions used below.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   install-and-run:
+    # Only run when the upstream release workflow succeeded. workflow_run
+    # also fires on failures and cancellations; we don't care about those.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, macos-13, windows-latest]
+        # macos-latest = Apple Silicon. We test the x86_64 slice via
+        # Rosetta 2 in a separate step below — same hardware, no need
+        # for the queue-starved free-tier macos-13 runner.
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +47,7 @@ jobs:
       - uses: ./
         id: setup
         with:
-          version: ${{ inputs.version || github.event.release.tag_name || 'latest' }}
+          version: ${{ inputs.version || 'latest' }}
 
       - name: dconsole resolves on PATH
         shell: bash
@@ -35,6 +55,23 @@ jobs:
           which dconsole
           dconsole --version
           dconsole --help | head -3
+
+      # Universal-binary check: both slices of the darwin_all Mach-O
+      # must actually run. macos-latest is Apple Silicon; Rosetta 2
+      # is preinstalled, so `arch -x86_64` exercises the x86_64 slice
+      # on the same hardware. Skipped on Linux/Windows (single-arch
+      # binaries there).
+      - name: Universal binary — both slices run
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          BIN=$(which dconsole)
+          file "$BIN"
+          lipo -info "$BIN"
+          echo "arm64 slice:"
+          arch -arm64   "$BIN" --version
+          echo "x86_64 slice (via Rosetta 2):"
+          arch -x86_64  "$BIN" --version
 
       - name: Output check
         shell: bash

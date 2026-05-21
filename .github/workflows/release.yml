@@ -11,6 +11,13 @@ on:
 permissions:
   contents: write
 
+env:
+  # Opt into Node.js 24 for all JS-based actions (checkout, setup-go,
+  # goreleaser-action). Forced default from June 2026; opting in early
+  # silences the per-run deprecation warnings and forward-tests our
+  # pipeline.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
