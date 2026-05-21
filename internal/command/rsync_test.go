@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/heydon/dconsole/internal/alias"
-	_ "github.com/heydon/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	_ "github.com/dconsole/dconsole/internal/transport"
 )
 
 func TestRsyncLocalToLocal(t *testing.T) {

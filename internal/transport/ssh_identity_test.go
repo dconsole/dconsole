@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 )
 
 func TestSSHArgs_WithIdentityFile(t *testing.T) {

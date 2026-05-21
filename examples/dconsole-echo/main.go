@@ -21,7 +21,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/heydon/dconsole/pkg/plugin"
+	"github.com/dconsole/dconsole/pkg/plugin"
 )
 
 const (
@@ -58,7 +58,7 @@ func emitPluginInfo() {
 		Name:            pluginName,
 		Version:         pluginVersion,
 		Description:     "Reference plugin that echoes the verb + alias to stderr (no remote action).",
-		Homepage:        "https://github.com/heydon-consulting/dconsole/tree/main/examples/dconsole-echo",
+		Homepage:        "https://github.com/dconsole/dconsole/tree/main/examples/dconsole-echo",
 		Transports: []plugin.TransportSpec{
 			{Type: "echo", Description: "No-op transport that echoes the requested command."},
 		},

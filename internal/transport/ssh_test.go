@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 )
 
 func TestSSHArgs(t *testing.T) {

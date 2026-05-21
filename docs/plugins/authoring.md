@@ -137,11 +137,11 @@ naturally bundle (e.g. Skpr offers both a transport AND a provider).
 
 ## 8. Writing the plugin in Go
 
-Depend on `github.com/heydon/dconsole/pkg/plugin` (the wire types) and
-optionally `github.com/heydon/dconsole/pkg/transport` /
-`github.com/heydon/dconsole/pkg/provider` (the SDK interfaces, useful
+Depend on `github.com/dconsole/dconsole/pkg/plugin` (the wire types) and
+optionally `github.com/dconsole/dconsole/pkg/transport` /
+`github.com/dconsole/dconsole/pkg/provider` (the SDK interfaces, useful
 if you're embedding a transport in another tool). **Do not import
-`github.com/heydon/dconsole/internal/*`** — those packages are not part
+`github.com/dconsole/dconsole/internal/*`** — those packages are not part
 of the stable API.
 
 The echo plugin is a complete, working example in ~150 LOC.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 )
 
 func TestResolveContextual_FullRef(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 )
 
 // ManifestName is the filename dconsole looks for at a repo root.

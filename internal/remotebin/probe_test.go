@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 )
 
 type fakeProber struct {

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 )
 
 // ErrNotSupported is returned by provider methods that aren't

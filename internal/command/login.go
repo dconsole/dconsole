@@ -10,9 +10,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/dlog"
-	"github.com/heydon/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/dlog"
+	"github.com/dconsole/dconsole/internal/transport"
 )
 
 // Login runs `drush user:login` on the alias and opens the resulting

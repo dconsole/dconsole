@@ -70,7 +70,7 @@ operation is targeting.
 ## Distribution
 
 Plugins are listed in the curated index at
-[`heydon-consulting/dconsole-plugin-index`](https://github.com/heydon-consulting/dconsole-plugin-index)
+[`dconsole/dconsole-plugin-index`](https://github.com/dconsole/dconsole-plugin-index)
 (separate repo). Authors PR a single YAML file describing their plugin
 and the per-platform release artifact URLs + sha256s — see
 [`docs/plugins/distribution.md`](../../docs/plugins/distribution.md).

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/heydon/dconsole/internal/alias"
-	_ "github.com/heydon/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	_ "github.com/dconsole/dconsole/internal/transport"
 )
 
 func TestExtractLoginURL(t *testing.T) {

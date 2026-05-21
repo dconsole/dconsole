@@ -8,7 +8,7 @@
 // Built-in providers register themselves at process start via Register.
 // Out-of-tree providers are shipped as separate binaries named
 // "dconsole-<type>" that dconsole discovers and drives via the wire
-// protocol defined in github.com/heydon/dconsole/pkg/plugin.
+// protocol defined in github.com/dconsole/dconsole/pkg/plugin.
 //
 // Plugin authors writing a Go SDK for their provider plugin should
 // depend on this package, not on dconsole's internal/* packages.

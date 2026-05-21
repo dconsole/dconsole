@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/assetscache"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/assetscache"
 )
 
 // AssetsCacheList prints every cached asset bundle in dconsole's

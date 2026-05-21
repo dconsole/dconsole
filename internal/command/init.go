@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/heydon/dconsole/internal/project"
+	"github.com/dconsole/dconsole/internal/project"
 )
 
 // InitOpts controls dconsole project:init.

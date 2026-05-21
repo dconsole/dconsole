@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/dbcache"
-	"github.com/heydon/dconsole/internal/dlog"
-	"github.com/heydon/dconsole/internal/provider"
-	"github.com/heydon/dconsole/internal/remotebin"
-	pkgtransport "github.com/heydon/dconsole/pkg/transport"
-	"github.com/heydon/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/dbcache"
+	"github.com/dconsole/dconsole/internal/dlog"
+	"github.com/dconsole/dconsole/internal/provider"
+	"github.com/dconsole/dconsole/internal/remotebin"
+	pkgtransport "github.com/dconsole/dconsole/pkg/transport"
+	"github.com/dconsole/dconsole/internal/transport"
 )
 
 // SqlSyncOpts mirrors the options of `drush sql:sync` that dconsole handles.

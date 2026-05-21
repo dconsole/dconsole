@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 )
 
 // SiteAliasList prints every site/env pair visible in the search path.

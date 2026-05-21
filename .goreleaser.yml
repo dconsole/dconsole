@@ -109,7 +109,7 @@ changelog:
 
 release:
   github:
-    owner: heydon-consulting
+    owner: dconsole
     name: dconsole
   draft: false
   prerelease: auto
@@ -133,4 +133,4 @@ release:
     The `dconsole-echo` archive is the reference plugin used to demo the plugin system — install only if you're poking at plugin development.
 
   footer: |
-    **Full Changelog**: https://github.com/heydon-consulting/dconsole/compare/{{.PreviousTag}}...{{.Tag}}
+    **Full Changelog**: https://github.com/dconsole/dconsole/compare/{{.PreviousTag}}...{{.Tag}}

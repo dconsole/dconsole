@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/transport"
 )
 
 // Shell drops the user into an interactive shell on the alias's remote.

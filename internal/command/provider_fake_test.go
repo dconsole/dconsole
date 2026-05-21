@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/provider"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/provider"
 )
 
 // fakeprovider is a test-only Provider registered at init() so we can

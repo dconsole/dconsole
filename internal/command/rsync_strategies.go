@@ -8,10 +8,10 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/dlog"
-	"github.com/heydon/dconsole/internal/transport"
-	pkgtransport "github.com/heydon/dconsole/pkg/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/dlog"
+	"github.com/dconsole/dconsole/internal/transport"
+	pkgtransport "github.com/dconsole/dconsole/pkg/transport"
 )
 
 // errStrategyNotApplicable means "this strategy doesn't fit the

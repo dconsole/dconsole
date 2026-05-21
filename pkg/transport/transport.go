@@ -8,7 +8,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 )
 
 // DBImporter is an optional capability a Transport may implement when

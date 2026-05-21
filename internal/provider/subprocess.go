@@ -9,10 +9,10 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/transport"
-	"github.com/heydon/dconsole/pkg/plugin"
-	pkgprovider "github.com/heydon/dconsole/pkg/provider"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/pkg/plugin"
+	pkgprovider "github.com/dconsole/dconsole/pkg/provider"
 )
 
 // init wires the subprocess runner into pkg/provider as the fallback

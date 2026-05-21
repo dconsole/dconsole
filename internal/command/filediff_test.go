@@ -5,7 +5,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 )
 
 // fakeAlias is a minimal Alias instance for orchestrator-detection

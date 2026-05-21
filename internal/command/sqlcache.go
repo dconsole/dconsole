@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/dbcache"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/dbcache"
 )
 
 // SqlCacheList prints every cached dump in dconsole's local sql cache,

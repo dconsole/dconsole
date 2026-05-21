@@ -10,9 +10,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/dlog"
-	"github.com/heydon/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/dlog"
+	"github.com/dconsole/dconsole/internal/transport"
 )
 
 // FileEntry is one row from the remote `find` invocation: a path

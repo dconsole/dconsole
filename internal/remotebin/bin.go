@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 )
 
 // Kind values supported by alias.bin.kind.

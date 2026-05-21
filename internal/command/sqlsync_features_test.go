@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/dbcache"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/dbcache"
 )
 
 // drushDumpScript writes a fake drush bin to dir that, on `sql:dump

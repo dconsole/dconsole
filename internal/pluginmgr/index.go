@@ -2,7 +2,7 @@
 // fetching the curated index, downloading & verifying release artifacts,
 // extracting them into ~/.dconsole/plugins/, and removing them.
 //
-// The curated index lives at github.com/heydon-consulting/dconsole-plugin-index
+// The curated index lives at github.com/dconsole/dconsole-plugin-index
 // (separate repo). Each plugin gets a single YAML file under plugins/
 // describing its release artifacts per platform; dconsole fetches
 // individual YAMLs over raw.githubusercontent.com (no API auth, no rate
@@ -24,7 +24,7 @@ import (
 
 // IndexBaseURL is the location of the per-plugin YAML files.
 // Overridable for testing.
-var IndexBaseURL = "https://raw.githubusercontent.com/heydon-consulting/dconsole-plugin-index/main"
+var IndexBaseURL = "https://raw.githubusercontent.com/dconsole/dconsole-plugin-index/main"
 
 // HTTPClient is the client used for index + artifact fetches. Tests
 // substitute a stub.

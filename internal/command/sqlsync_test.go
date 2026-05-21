@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/heydon/dconsole/internal/alias"
-	_ "github.com/heydon/dconsole/internal/provider"
-	_ "github.com/heydon/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	_ "github.com/dconsole/dconsole/internal/provider"
+	_ "github.com/dconsole/dconsole/internal/transport"
 )
 
 // TestSqlSyncEndToEnd verifies that sql:sync orchestration:

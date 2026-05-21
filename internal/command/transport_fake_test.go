@@ -7,8 +7,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/pkg/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/pkg/transport"
 )
 
 // fakeImportTransport satisfies both transport.Transport AND

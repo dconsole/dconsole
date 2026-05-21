@@ -15,8 +15,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/remotebin"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/remotebin"
 )
 
 // Runner is the minimal capability we need to ask the remote: run a

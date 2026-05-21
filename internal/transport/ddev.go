@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/dlog"
-	"github.com/heydon/dconsole/internal/run"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/dlog"
+	"github.com/dconsole/dconsole/internal/run"
 )
 
 // ddevTransport runs commands via `ddev exec` against a local project.

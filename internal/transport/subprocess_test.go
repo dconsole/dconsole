@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 	"gopkg.in/yaml.v3"
 )
 

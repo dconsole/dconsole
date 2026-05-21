@@ -12,13 +12,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/command"
-	"github.com/heydon/dconsole/internal/dlog"
-	"github.com/heydon/dconsole/internal/pluginmgr"
-	_ "github.com/heydon/dconsole/internal/provider" // register provider factories
-	"github.com/heydon/dconsole/internal/remotebin"
-	_ "github.com/heydon/dconsole/internal/transport" // register transport factories
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/command"
+	"github.com/dconsole/dconsole/internal/dlog"
+	"github.com/dconsole/dconsole/internal/pluginmgr"
+	_ "github.com/dconsole/dconsole/internal/provider" // register provider factories
+	"github.com/dconsole/dconsole/internal/remotebin"
+	_ "github.com/dconsole/dconsole/internal/transport" // register transport factories
 )
 
 // version is overridden by goreleaser via `-X main.version={{.Version}}`

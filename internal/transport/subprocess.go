@@ -12,9 +12,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/pkg/plugin"
-	pkgtransport "github.com/heydon/dconsole/pkg/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/pkg/plugin"
+	pkgtransport "github.com/dconsole/dconsole/pkg/transport"
 )
 
 // init wires the subprocess runner into pkg/transport as the fallback

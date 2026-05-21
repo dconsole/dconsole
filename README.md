@@ -33,12 +33,12 @@ DB pulls and rsync from ssh to ddev.
 ## Install
 
 Download a binary for your OS+arch from the
-[releases page](https://github.com/heydon-consulting/dconsole/releases),
+[releases page](https://github.com/dconsole/dconsole/releases),
 extract, and drop on `$PATH`:
 
 ```sh
 # Apple Silicon
-curl -L https://github.com/heydon-consulting/dconsole/releases/latest/download/dconsole_0.1.0_darwin_arm64.tar.gz \
+curl -L https://github.com/dconsole/dconsole/releases/latest/download/dconsole_0.1.0_darwin_arm64.tar.gz \
   | tar -xz
 mv dconsole ~/.local/bin/
 ```
@@ -52,7 +52,7 @@ dconsole --version
 Or build from source (requires Go 1.24+):
 
 ```sh
-go install github.com/heydon-consulting/dconsole/cmd/dconsole@latest
+go install github.com/dconsole/dconsole/cmd/dconsole@latest
 ```
 
 ## Quickstart
@@ -454,7 +454,7 @@ independently.
 ## Building from source
 
 ```sh
-git clone https://github.com/heydon-consulting/dconsole.git
+git clone https://github.com/dconsole/dconsole.git
 cd dconsole
 go build -o dconsole ./cmd/dconsole
 

@@ -1,4 +1,4 @@
-module github.com/heydon/dconsole
+module github.com/dconsole/dconsole
 
 go 1.24
 

@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/heydon/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/alias"
 )
 
 // DefaultTTL is the freshness window used when no TTL is supplied.

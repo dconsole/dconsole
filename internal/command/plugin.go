@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/heydon/dconsole/internal/pluginmgr"
-	"github.com/heydon/dconsole/internal/transport"
-	"github.com/heydon/dconsole/pkg/plugin"
+	"github.com/dconsole/dconsole/internal/pluginmgr"
+	"github.com/dconsole/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/pkg/plugin"
 )
 
 // PluginInstall handles `dconsole plugin install` with its --name/

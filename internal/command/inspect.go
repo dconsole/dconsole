@@ -6,9 +6,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/remotebin"
-	"github.com/heydon/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/remotebin"
+	"github.com/dconsole/dconsole/internal/transport"
 )
 
 // Inspect prints what dconsole *would* do for a given argv, without

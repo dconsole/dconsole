@@ -51,7 +51,7 @@ sha256sum dconsole-foo-1.0.0-*.tar.gz
 ## 3. Add yourself to the curated index
 
 Open a PR against
-[`heydon-consulting/dconsole-plugin-index`](https://github.com/heydon-consulting/dconsole-plugin-index)
+[`dconsole/dconsole-plugin-index`](https://github.com/dconsole/dconsole-plugin-index)
 (separate repo, public). Add one file:
 
 ```
@@ -158,5 +158,5 @@ Skip them in v1 unless a real user asks.
   implement.
 - [Echo reference plugin](../../examples/dconsole-echo) — minimal
   working example.
-- [dconsole-plugin-index](https://github.com/heydon-consulting/dconsole-plugin-index)
+- [dconsole-plugin-index](https://github.com/dconsole/dconsole-plugin-index)
   — the index repo (separate; not created yet at time of writing).

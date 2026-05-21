@@ -1,12 +1,12 @@
 // Package provider hosts the registry shim for providers. The public
-// extension API lives in github.com/heydon/dconsole/pkg/provider; this
+// extension API lives in github.com/dconsole/dconsole/pkg/provider; this
 // package re-exports the symbols other dconsole packages already import
 // here. There are no in-tree provider implementations — every provider
 // arrives as a subprocess plugin via internal/provider/subprocess.go.
 package provider
 
 import (
-	pkgprovider "github.com/heydon/dconsole/pkg/provider"
+	pkgprovider "github.com/dconsole/dconsole/pkg/provider"
 )
 
 // Re-exports from pkg/provider.

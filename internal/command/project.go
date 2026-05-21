@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/project"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/project"
 )
 
 // WireProjectResolution attaches the project registry/manifest lookup to

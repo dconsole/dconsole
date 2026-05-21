@@ -5,11 +5,11 @@ import (
 	"context"
 	"strings"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/dlog"
-	"github.com/heydon/dconsole/internal/remotebin"
-	"github.com/heydon/dconsole/internal/run"
-	"github.com/heydon/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/dlog"
+	"github.com/dconsole/dconsole/internal/remotebin"
+	"github.com/dconsole/dconsole/internal/run"
+	"github.com/dconsole/dconsole/internal/transport"
 )
 
 // Forward shells the remaining command-line through the alias's transport

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/heydon/dconsole/internal/pluginmgr"
-	"github.com/heydon/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/internal/pluginmgr"
+	"github.com/dconsole/dconsole/internal/transport"
 )
 
 // TransportList prints each registered transport (built-in + installed

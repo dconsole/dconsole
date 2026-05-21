@@ -1,12 +1,12 @@
 // Package transport hosts the registry for in-tree transports. The
-// public extension API lives in github.com/heydon/dconsole/pkg/transport;
+// public extension API lives in github.com/dconsole/dconsole/pkg/transport;
 // this package re-exports the symbols other dconsole packages already
 // import here, plus the init() registrations for the built-in transports
 // (ssh, ddev, docker, kubectl, lando, compose, exec).
 package transport
 
 import (
-	pkgtransport "github.com/heydon/dconsole/pkg/transport"
+	pkgtransport "github.com/dconsole/dconsole/pkg/transport"
 )
 
 // Re-exports from pkg/transport so existing internal callers (forward,

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/provider"
-	"github.com/heydon/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/provider"
+	"github.com/dconsole/dconsole/internal/transport"
 )
 
 // LoginCapable is the duck-typed interface for transports and providers

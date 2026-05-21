@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/heydon/dconsole/internal/alias"
-	"github.com/heydon/dconsole/internal/run"
+	"github.com/dconsole/dconsole/internal/alias"
+	"github.com/dconsole/dconsole/internal/run"
 )
 
 type sshTransport struct {
