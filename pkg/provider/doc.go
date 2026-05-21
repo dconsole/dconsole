@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package provider is the public extension API for dconsole providers.
 //
 // A provider integrates a hosting service (Skpr, Pantheon, Acquia,

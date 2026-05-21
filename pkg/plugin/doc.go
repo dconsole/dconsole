@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package plugin defines the wire protocol between dconsole and its
 // subprocess plugins. Plugins are separate binaries named
 // "dconsole-<type>" that implement the verbs documented here.

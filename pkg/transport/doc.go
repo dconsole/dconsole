@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package transport is the public extension API for dconsole transports.
 //
 // A transport reaches a remote environment described by an Alias. Built-in

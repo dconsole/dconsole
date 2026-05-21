@@ -177,6 +177,21 @@ ln -sf "$PWD/dconsole-skpr" ~/.dconsole/plugins/
 Then any dconsole alias with `transport: { type: skpr }` will route
 through your in-development binary.
 
+## Licensing your plugin
+
+The plugin SDK packages (`pkg/plugin`, `pkg/provider`, `pkg/transport`)
+are licensed under **Apache-2.0**. Importing them carries no copyleft
+obligation. You can publish your plugin under any license: MIT, BSD,
+Apache, GPL, proprietary, or commercial.
+
+The dconsole CLI itself stays under GPL-2.0, so anyone modifying or
+redistributing dconsole's core stays under copyleft — but a plugin
+distributed as a separate binary that talks to dconsole over its
+documented protocol is not a derivative work of the CLI.
+
+See the top-level [README License section](../../README.md#license)
+for the full split.
+
 ## See also
 
 - [Distribution](./distribution.md) — how to publish a release and get

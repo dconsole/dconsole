@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package plugin
 
 // ProtocolV1 is the current wire-protocol version dconsole understands.

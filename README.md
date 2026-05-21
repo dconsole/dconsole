@@ -495,4 +495,17 @@ Go 1.24+ required (uses `testing.Chdir`).
 
 ## License
 
-[GNU General Public License v2.0](LICENSE) — © Heydon Consulting.
+dconsole uses a split license to keep the core copyleft while letting
+third-party plugins ship under any terms — including closed-source
+commercial:
+
+| Path | License | Why |
+|------|---------|-----|
+| `cmd/`, `internal/` | [GPL-2.0-only](LICENSE) | The CLI itself. Anyone modifying or redistributing dconsole stays under copyleft. |
+| `pkg/plugin`, `pkg/provider`, `pkg/transport` | [Apache-2.0](pkg/LICENSE) | The plugin SDK. Plugin authors import these and need a permissive license so they aren't pulled into the GPL. |
+
+This is the same split [Linux uses for its UAPI headers](https://lkml.org/lkml/2003/12/9/108) and Terraform uses for its [plugin SDK](https://github.com/hashicorp/terraform-plugin-sdk/blob/main/LICENSE): the runtime API surface is permissive, the implementation is copyleft.
+
+**For plugin authors**: imports under `github.com/dconsole/dconsole/pkg/*` are Apache-2.0. You can publish your plugin under any license — MIT, BSD, Apache, GPL, proprietary, commercial. Plugins also run as separate subprocess binaries communicating over stdin/stdout, which under [the FSF's interpretation](https://www.gnu.org/licenses/gpl-faq.html#MereAggregation) is not derivative-work territory even before the SDK carve-out.
+
+© Heydon Consulting.
