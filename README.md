@@ -37,8 +37,13 @@ Download a binary for your OS+arch from the
 extract, and drop on `$PATH`:
 
 ```sh
-# Apple Silicon
-curl -L https://github.com/dconsole/dconsole/releases/latest/download/dconsole_0.1.0_darwin_arm64.tar.gz \
+# macOS — one universal binary runs on both Intel and Apple Silicon
+curl -L https://github.com/dconsole/dconsole/releases/latest/download/dconsole_0.3.0_darwin_all.tar.gz \
+  | tar -xz
+mv dconsole ~/.local/bin/
+
+# Linux
+curl -L https://github.com/dconsole/dconsole/releases/latest/download/dconsole_0.3.0_linux_amd64.tar.gz \
   | tar -xz
 mv dconsole ~/.local/bin/
 ```

@@ -33,9 +33,20 @@ builds:
       - goos: windows
         goarch: arm64  # uncommon; skip until someone asks
 
+# Merge the two macOS slices into one fat Mach-O via `lipo`. Result is
+# a single `darwin_all` archive containing a binary that runs natively
+# on both Intel and Apple Silicon — the homebrew-style convention for
+# Mac CLI tools. replace: true removes the per-arch darwin binaries so
+# we don't ship three macOS archives.
+universal_binaries:
+  - id: dconsole-universal
+    ids: [dconsole]
+    name_template: dconsole
+    replace: true
+
 archives:
   - id: dconsole
-    ids: [dconsole]
+    ids: [dconsole, dconsole-universal]
     name_template: >-
       dconsole_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     formats: [tar.gz]
