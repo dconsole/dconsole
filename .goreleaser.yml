@@ -12,7 +12,9 @@ before:
     - go mod tidy
 
 builds:
-  # dconsole — the main CLI.
+  # dconsole — the main CLI. The dconsole-echo reference plugin
+  # stays in-tree under examples/ but isn't shipped as a release
+  # artifact; plugin authors build it themselves when they need it.
   - id: dconsole
     main: ./cmd/dconsole
     binary: dconsole
@@ -31,31 +33,7 @@ builds:
       - goos: windows
         goarch: arm64  # uncommon; skip until someone asks
 
-  # dconsole-echo — the reference plugin. Built and shipped alongside
-  # so users can test the plugin system end-to-end without compiling
-  # from source.
-  - id: dconsole-echo
-    main: ./examples/dconsole-echo
-    binary: dconsole-echo
-    env:
-      - CGO_ENABLED=0
-    ldflags:
-      - -s -w
-    goos:
-      - darwin
-      - linux
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    ignore:
-      - goos: windows
-        goarch: arm64
-
 archives:
-  # One archive per binary per platform — easier to consume than a
-  # single bundled archive (users typically want just dconsole; the
-  # echo plugin is opt-in).
   - id: dconsole
     ids: [dconsole]
     name_template: >-
@@ -68,18 +46,6 @@ archives:
       - README*
       - LICENSE*
       - docs/**/*
-
-  - id: dconsole-echo
-    ids: [dconsole-echo]
-    name_template: >-
-      dconsole-echo_{{ .Version }}_{{ .Os }}_{{ .Arch }}
-    formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
-    files:
-      - examples/dconsole-echo/README*
-      - examples/dconsole-echo/echo.site.yml.example
 
 checksum:
   name_template: "checksums.txt"
@@ -129,8 +95,6 @@ release:
     ```
 
     Verify with `dconsole --version`.
-
-    The `dconsole-echo` archive is the reference plugin used to demo the plugin system — install only if you're poking at plugin development.
 
   footer: |
     **Full Changelog**: https://github.com/dconsole/dconsole/compare/{{.PreviousTag}}...{{.Tag}}
