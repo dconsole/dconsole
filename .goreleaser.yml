@@ -78,6 +78,9 @@ brews:
       name: homebrew-tap
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    # Modern Homebrew layout — formulae live under Formula/.
+    # Without this, goreleaser drops the .rb at repo root.
+    directory: Formula
     homepage: https://github.com/dconsole/dconsole
     description: Transport-agnostic CLI proxy for Drupal — one command surface across ssh, ddev, lando, docker, kubectl, and subprocess plugins.
     license: GPL-2.0-only
