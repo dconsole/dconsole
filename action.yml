@@ -31,15 +31,24 @@ runs:
 
         # Resolve "latest" via the API. Authenticated to avoid the 60 req/h
         # unauthenticated rate limit when workflows run often.
+        #
+        # The response is captured to a variable BEFORE parsing so the
+        # parser can't close the pipe while curl is still writing — that
+        # combo (curl | grep -m1) earns curl a SIGPIPE → exit 23, which
+        # `set -euo pipefail` turns into a fatal script abort. jq is
+        # preinstalled on every GH-hosted runner so we use it directly.
         if [ "$VERSION" = "latest" ]; then
-          VERSION=$(
+          RESPONSE=$(
             curl -fsSL \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/dconsole/dconsole/releases/latest" \
-              | grep -m1 -E '"tag_name"' \
-              | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/'
+              "https://api.github.com/repos/dconsole/dconsole/releases/latest"
           )
+          VERSION=$(printf '%s' "$RESPONSE" | jq -r '.tag_name')
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "::error::Could not resolve latest release tag"
+            exit 1
+          fi
           echo "Resolved latest → $VERSION"
         fi
 

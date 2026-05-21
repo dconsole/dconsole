@@ -40,6 +40,9 @@ jobs:
         # Rosetta 2 in a separate step below — same hardware, no need
         # for the queue-starved free-tier macos-13 runner.
         os: [ubuntu-latest, macos-latest, windows-latest]
+        # Run BOTH the "latest" resolution code path AND a concrete-tag
+        # pin on every release, so a regression in either kind shows up.
+        version: ["latest", "${{ github.event.release.tag_name || inputs.version || 'latest' }}"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -47,7 +50,7 @@ jobs:
       - uses: ./
         id: setup
         with:
-          version: ${{ inputs.version || 'latest' }}
+          version: ${{ matrix.version }}
 
       - name: dconsole resolves on PATH
         shell: bash
