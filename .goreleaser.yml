@@ -64,6 +64,33 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot"
 
+# Push a Homebrew formula to dconsole/homebrew-tap on every (non-pre)
+# release. Users install with:
+#   brew tap dconsole/tap
+#   brew install dconsole
+# Requires a HOMEBREW_TAP_GITHUB_TOKEN secret on this repo with
+# `contents:write` on the tap repo. Default GITHUB_TOKEN can't push
+# cross-repo.
+brews:
+  - name: dconsole
+    repository:
+      owner: dconsole
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/dconsole/dconsole
+    description: Transport-agnostic CLI proxy for Drupal — one command surface across ssh, ddev, lando, docker, kubectl, and subprocess plugins.
+    license: GPL-2.0-only
+    skip_upload: auto  # skip on prereleases / snapshot
+    commit_author:
+      name: dconsole-bot
+      email: noreply@github.com
+    commit_msg_template: "dconsole {{ .Tag }}"
+    install: |
+      bin.install "dconsole"
+    test: |
+      assert_match "dconsole", shell_output("#{bin}/dconsole --version")
+
 changelog:
   use: github
   sort: asc

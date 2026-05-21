@@ -36,3 +36,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT with contents:write on dconsole/homebrew-tap. Required so
+          # goreleaser can push the updated Formula/dconsole.rb cross-repo.
+          # Default GITHUB_TOKEN can't write outside this repo.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
