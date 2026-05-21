@@ -218,11 +218,18 @@ type ExecTransport struct {
 }
 
 type SSHTransport struct {
-	Host         string   `yaml:"host"`
-	User         string   `yaml:"user,omitempty"`
-	Port         int      `yaml:"port,omitempty"`
-	IdentityFile string   `yaml:"identity_file,omitempty"`
-	Options      []string `yaml:"options,omitempty"`
+	Host         string `yaml:"host"`
+	User         string `yaml:"user,omitempty"`
+	Port         int    `yaml:"port,omitempty"`
+	IdentityFile string `yaml:"identity_file,omitempty"`
+
+	// Options are extra arguments passed to ssh. Two input shapes are
+	// accepted:
+	//   - Argv tokens: ["-o", "BatchMode=yes", "-C"]
+	//   - Bare key=value shortcuts: ["BatchMode=yes", "ConnectTimeout=20"]
+	// dconsole auto-prefixes "-o" to bare key=value tokens, so the
+	// shortcut form behaves the way most users expect.
+	Options []string `yaml:"options,omitempty"`
 }
 
 type DockerTransport struct {

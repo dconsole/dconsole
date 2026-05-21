@@ -74,7 +74,7 @@ func (s *sshTransport) Shell(ctx context.Context, workDir string) error {
 	if path := expandIdentityPath(s.cfg.IdentityFile); path != "" {
 		args = append(args, "-i", path, "-o", "IdentitiesOnly=yes")
 	}
-	args = append(args, s.cfg.Options...)
+	args = append(args, expandSSHOptions(s.cfg.Options)...)
 	cdCmd := ""
 	if workDir != "" {
 		cdCmd = "cd " + singleQuote(workDir) + " && "
@@ -98,7 +98,7 @@ func (s *sshTransport) sshArgs(remoteCmd []string) []string {
 		// attempts. Without it, ssh treats -i as additive.
 		args = append(args, "-i", path, "-o", "IdentitiesOnly=yes")
 	}
-	args = append(args, s.cfg.Options...)
+	args = append(args, expandSSHOptions(s.cfg.Options)...)
 	target := s.cfg.Host
 	if s.cfg.User != "" {
 		target = s.cfg.User + "@" + s.cfg.Host
@@ -126,12 +126,57 @@ func (s *sshTransport) RsyncRemote() (string, []string) {
 	if path := expandIdentityPath(s.cfg.IdentityFile); path != "" {
 		opts = append(opts, "-i", path, "-o", "IdentitiesOnly=yes")
 	}
-	opts = append(opts, s.cfg.Options...)
+	opts = append(opts, expandSSHOptions(s.cfg.Options)...)
 	target := s.cfg.Host
 	if s.cfg.User != "" {
 		target = s.cfg.User + "@" + s.cfg.Host
 	}
 	return target, opts
+}
+
+// expandSSHOptions normalises the alias's transport.ssh.options list
+// into argv tokens ssh actually accepts. Two input shapes are honoured:
+//
+//  1. Argv tokens (the original schema):
+//     ["-o", "BatchMode=yes", "-C"]
+//  2. Bare key=value shortcuts (the natural form):
+//     ["BatchMode=yes", "ConnectTimeout=20"]
+//     → auto-wrapped to ["-o", "BatchMode=yes", "-o", "ConnectTimeout=20"]
+//
+// Tokens starting with "-" pass through unchanged (handles -C, -q, -A,
+// etc.). Tokens that immediately follow a value-taking flag (-o, -i,
+// -p, -l, -F, -J, -L, -R, -D, -B) also pass through — they're the
+// value half of an existing two-token pair and would otherwise get
+// double-wrapped. Anything else containing "=" is wrapped in "-o".
+func expandSSHOptions(opts []string) []string {
+	out := make([]string, 0, len(opts))
+	for i, tok := range opts {
+		if tok == "" {
+			continue
+		}
+		if strings.HasPrefix(tok, "-") {
+			out = append(out, tok)
+			continue
+		}
+		if i > 0 && sshFlagTakesValue(opts[i-1]) {
+			out = append(out, tok)
+			continue
+		}
+		if strings.Contains(tok, "=") {
+			out = append(out, "-o", tok)
+			continue
+		}
+		out = append(out, tok)
+	}
+	return out
+}
+
+func sshFlagTakesValue(s string) bool {
+	switch s {
+	case "-o", "-i", "-p", "-l", "-F", "-J", "-L", "-R", "-D", "-B":
+		return true
+	}
+	return false
 }
 
 // expandIdentityPath turns "~" and "~/" prefixes into absolute paths so
