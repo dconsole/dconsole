@@ -44,10 +44,11 @@ func (f *proberFakeTransport) Pipe(ctx context.Context, cmd []string, in io.Read
 }
 func (f *proberFakeTransport) Shell(ctx context.Context, workDir string) error { return nil }
 func (f *proberFakeTransport) Preview(cmd []string) []string                   { return cmd }
+func (f *proberFakeTransport) Wrap(inner []string) []string                    { return inner }
 
 func TestTransportProberSuppressesStderrOnSuccess(t *testing.T) {
 	f := &proberFakeTransport{stdout: "Drush 13.0\n"}
-	p := &transportProber{t: f}
+	p := &transportProber{h: f}
 
 	out, err := p.Run(context.Background(), []string{"drush", "--version"})
 	if err != nil {
@@ -71,7 +72,7 @@ func TestTransportProberCapturesStderrIntoError(t *testing.T) {
 		stderr:  "bash: line 1: drupal: command not found\n",
 		exitErr: errors.New("exit status 127"),
 	}
-	p := &transportProber{t: f}
+	p := &transportProber{h: f}
 
 	_, err := p.Run(context.Background(), []string{"drupal", "--version"})
 	if err == nil {

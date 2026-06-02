@@ -10,29 +10,29 @@ import (
 	"github.com/dconsole/dconsole/internal/dlog"
 	"github.com/dconsole/dconsole/internal/remotebin"
 	"github.com/dconsole/dconsole/internal/run"
-	"github.com/dconsole/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/pkg/handler"
 )
 
 // Forward shells the remaining command-line through the alias's transport
 // to its remote CLI. This is the default for any command dconsole doesn't
 // implement itself.
 func Forward(ctx context.Context, a *alias.Alias, args []string) error {
-	t, err := transport.For(a)
+	h, err := handler.For(a)
 	if err != nil {
 		return err
 	}
-	if err := t.Available(); err != nil {
+	if err := h.Available(); err != nil {
 		return err
 	}
-	bin, err := resolveBin(ctx, a, t)
+	bin, err := resolveBin(ctx, a, h)
 	if err != nil {
 		return err
 	}
 	args = augmentDrushContext(a, args)
 	args = appendDrushFlags(args)
 	cmd := bin.Argv(args)
-	dlog.Cmdf(t.Preview(cmd))
-	return t.Exec(ctx, cmd, run.DefaultStdio())
+	dlog.Cmdf(h.Preview(cmd))
+	return h.Exec(ctx, cmd, run.DefaultStdio())
 }
 
 // augmentDrushContext prepends --root and --uri to args so drush can
@@ -87,16 +87,16 @@ func appendDrushFlags(args []string) []string {
 // resolveBin returns the concrete RemoteBin for an alias, auto-probing if
 // kind: auto. Used by Forward and built-in commands that need to run the
 // remote CLI (sql:sync, rsync, status).
-func resolveBin(ctx context.Context, a *alias.Alias, t transport.Transport) (*remotebin.Resolved, error) {
+func resolveBin(ctx context.Context, a *alias.Alias, h handler.Handler) (*remotebin.Resolved, error) {
 	if r, ok := remotebin.Resolve(a); ok {
 		return r, nil
 	}
-	return remotebin.Probe(ctx, a, &transportProber{t: t})
+	return remotebin.Probe(ctx, a, &transportProber{h: h})
 }
 
-// transportProber adapts a Transport to remotebin.Prober without creating
-// a cyclic dependency between transport and remotebin.
-type transportProber struct{ t transport.Transport }
+// transportProber adapts a Handler to remotebin.Prober without creating
+// a cyclic dependency between handler and remotebin.
+type transportProber struct{ h handler.Handler }
 
 // Run executes a probe (no stdin, captured stdout) and SUPPRESSES the
 // remote command's stderr on the user's terminal. Auto-probe routinely
@@ -110,7 +110,7 @@ type transportProber struct{ t transport.Transport }
 // (which hardcodes stderr to os.Stderr).
 func (p *transportProber) Run(ctx context.Context, cmd []string) ([]byte, error) {
 	var stdout, stderr bytes.Buffer
-	err := p.t.Exec(ctx, cmd, transport.Stdio{Out: &stdout, Err: &stderr})
+	err := p.h.Exec(ctx, cmd, handler.Stdio{Out: &stdout, Err: &stderr})
 	if err != nil && stderr.Len() > 0 {
 		return stdout.Bytes(), fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 	}

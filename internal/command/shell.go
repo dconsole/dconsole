@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dconsole/dconsole/internal/alias"
-	"github.com/dconsole/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/pkg/handler"
 )
 
 // Shell drops the user into an interactive shell on the alias's remote.
@@ -15,11 +15,11 @@ import (
 // Aliased on the CLI as both `sh` and `ssh` to match `drush ssh` muscle
 // memory while making it clear the remote drush isn't loaded.
 func Shell(ctx context.Context, a *alias.Alias, workDirOverride string) error {
-	t, err := transport.For(a)
+	h, err := handler.For(a)
 	if err != nil {
 		return err
 	}
-	if err := t.Available(); err != nil {
+	if err := h.Available(); err != nil {
 		return err
 	}
 	workDir := workDirOverride
@@ -29,5 +29,5 @@ func Shell(ctx context.Context, a *alias.Alias, workDirOverride string) error {
 	if workDir == "" {
 		fmt.Printf("(no root set on @%s.%s — shell will land in the container/host default dir)\n", a.Site, a.Env)
 	}
-	return t.Shell(ctx, workDir)
+	return h.Shell(ctx, workDir)
 }

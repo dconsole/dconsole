@@ -48,8 +48,8 @@ func TestAuth_RoutesToProvider(t *testing.T) {
 	if string(got) != "login\n" {
 		t.Errorf("script called with %q; want \"login\\n\"", string(got))
 	}
-	if !bytes.Contains(out.Bytes(), []byte("logging in via provider fake")) {
-		t.Errorf("dconsole output missing provider announcement; got:\n%s", out.String())
+	if !bytes.Contains(out.Bytes(), []byte("logging in via fake")) {
+		t.Errorf("dconsole output missing handler login announcement; got:\n%s", out.String())
 	}
 }
 

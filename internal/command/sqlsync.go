@@ -18,8 +18,7 @@ import (
 	"github.com/dconsole/dconsole/internal/dlog"
 	"github.com/dconsole/dconsole/internal/provider"
 	"github.com/dconsole/dconsole/internal/remotebin"
-	pkgtransport "github.com/dconsole/dconsole/pkg/transport"
-	"github.com/dconsole/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/pkg/handler"
 )
 
 // SqlSyncOpts mirrors the options of `drush sql:sync` that dconsole handles.
@@ -72,16 +71,21 @@ func SqlSync(ctx context.Context, source, target *alias.Alias, out io.Writer, in
 		return err
 	}
 
-	// 1. Provider end-to-end takeover. Tried first so providers that
-	// don't ship SQL dumps (Skpr-style) can short-circuit.
-	if p, _ := provider.For(source); p != nil {
-		err := p.SyncTo(ctx, source, target)
+	// 1. Handler end-to-end takeover (was provider.SyncTo). Tried first
+	// so platforms that don't ship SQL dumps (Skpr-style image pull)
+	// can short-circuit.
+	sourceH, err := handler.For(source)
+	if err != nil {
+		return fmt.Errorf("source @%s.%s: %w", source.Site, source.Env, err)
+	}
+	if syncer, ok := handler.Inner(sourceH).(handler.DBSyncer); ok {
+		err := syncer.SyncTo(ctx, source, target)
 		if err == nil {
-			fmt.Fprintf(out, "synced via provider %s (end-to-end)\n", p.Name())
+			fmt.Fprintf(out, "synced via %s (end-to-end)\n", sourceH.Name())
 			return nil
 		}
 		if !errors.Is(err, provider.ErrNotSupported) {
-			return fmt.Errorf("%s.SyncTo: %w", p.Name(), err)
+			return fmt.Errorf("%s.SyncTo: %w", sourceH.Name(), err)
 		}
 		// fall through to dump + load
 	}
@@ -207,16 +211,20 @@ func obtainDump(ctx context.Context, source *alias.Alias, out io.Writer, opts Sq
 // (the pre-cache version of the original obtainDump). The returned
 // cleanup removes the temp file.
 func obtainDumpUncached(ctx context.Context, source *alias.Alias, out io.Writer, opts SqlSyncOpts) (string, func(), error) {
-	if p, _ := provider.For(source); p != nil {
-		fmt.Fprintf(out, "fetching dump for @%s.%s via provider %s\n", source.Site, source.Env, p.Name())
-		path, cleanup, err := p.DumpFor(ctx, source)
+	srcH, err := handler.For(source)
+	if err != nil {
+		return "", nil, fmt.Errorf("source @%s.%s: %w", source.Site, source.Env, err)
+	}
+	if dumper, ok := handler.Inner(srcH).(handler.DBDumper); ok {
+		fmt.Fprintf(out, "fetching dump for @%s.%s via %s\n", source.Site, source.Env, srcH.Name())
+		path, cleanup, err := dumper.DumpFor(ctx, source)
 		if err == nil {
 			return path, cleanup, nil
 		}
 		if !errors.Is(err, provider.ErrNotSupported) {
-			return "", nil, fmt.Errorf("%s.DumpFor: %w", p.Name(), err)
+			return "", nil, fmt.Errorf("%s.DumpFor: %w", srcH.Name(), err)
 		}
-		fmt.Fprintf(out, "provider %s does not support DumpFor; falling back to alias.sql.source\n", p.Name())
+		fmt.Fprintf(out, "%s does not support DumpFor; falling back to alias.sql.source\n", srcH.Name())
 	}
 
 	src := source.SQL.Source
@@ -282,14 +290,14 @@ func effectiveStructureTablesKey(a *alias.Alias, opts SqlSyncOpts) string {
 }
 
 func obtainDumpDrush(ctx context.Context, source *alias.Alias, out io.Writer, opts SqlSyncOpts) (string, func(), error) {
-	sourceT, err := transport.For(source)
+	sourceH, err := handler.For(source)
 	if err != nil {
 		return "", nil, fmt.Errorf("source @%s.%s: %w", source.Site, source.Env, err)
 	}
-	if err := sourceT.Available(); err != nil {
+	if err := sourceH.Available(); err != nil {
 		return "", nil, err
 	}
-	sourceBin, err := resolveBin(ctx, source, sourceT)
+	sourceBin, err := resolveBin(ctx, source, sourceH)
 	if err != nil {
 		return "", nil, fmt.Errorf("source bin: %w", err)
 	}
@@ -297,8 +305,8 @@ func obtainDumpDrush(ctx context.Context, source *alias.Alias, out io.Writer, op
 	if err != nil {
 		return "", nil, err
 	}
-	fmt.Fprintf(out, "dumping @%s.%s via %s drush → %s\n", source.Site, source.Env, sourceT.Name(), dumpPath)
-	if err := dumpToFile(ctx, sourceT, sourceBin, dumpPath, source, opts); err != nil {
+	fmt.Fprintf(out, "dumping @%s.%s via %s drush → %s\n", source.Site, source.Env, sourceH.Name(), dumpPath)
+	if err := dumpToFile(ctx, sourceH, sourceBin, dumpPath, source, opts); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("dump: %w", err)
 	}
@@ -314,18 +322,18 @@ func obtainDumpFile(ctx context.Context, source *alias.Alias, out io.Writer, opt
 	if src.Path == "" {
 		return "", nil, fmt.Errorf("@%s.%s: sql.source.type=file requires sql.source.path", source.Site, source.Env)
 	}
-	sourceT, err := transport.For(source)
+	sourceH, err := handler.For(source)
 	if err != nil {
 		return "", nil, fmt.Errorf("source @%s.%s: %w", source.Site, source.Env, err)
 	}
-	if err := sourceT.Available(); err != nil {
+	if err := sourceH.Available(); err != nil {
 		return "", nil, err
 	}
 	dumpPath, cleanup, err := openDump(opts)
 	if err != nil {
 		return "", nil, err
 	}
-	fmt.Fprintf(out, "fetching dump file @%s.%s:%s via %s → %s\n", source.Site, source.Env, src.Path, sourceT.Name(), dumpPath)
+	fmt.Fprintf(out, "fetching dump file @%s.%s:%s via %s → %s\n", source.Site, source.Env, src.Path, sourceH.Name(), dumpPath)
 
 	f, err := os.Create(dumpPath)
 	if err != nil {
@@ -340,10 +348,10 @@ func obtainDumpFile(ctx context.Context, source *alias.Alias, out io.Writer, opt
 	if src.SourceGzipped() {
 		remoteCmd = []string{"cat", src.Path}
 	}
-	dlog.Cmdf(sourceT.Preview(remoteCmd))
-	if err := sourceT.Pipe(ctx, remoteCmd, nil, f); err != nil {
+	dlog.Cmdf(sourceH.Preview(remoteCmd))
+	if err := sourceH.Pipe(ctx, remoteCmd, nil, f); err != nil {
 		cleanup()
-		return "", nil, fmt.Errorf("fetch %s via %s: %w", src.Path, sourceT.Name(), err)
+		return "", nil, fmt.Errorf("fetch %s via %s: %w", src.Path, sourceH.Name(), err)
 	}
 	return dumpPath, cleanup, nil
 }
@@ -409,52 +417,54 @@ func gzipFile(src, dst string) error {
 // transport's DBImporter (duck-typed; ddev implements this), or falls
 // back to streaming the dump through `<target.bin> sql:cli`.
 func loadDump(ctx context.Context, target *alias.Alias, dumpPath string, out io.Writer, opts SqlSyncOpts) error {
-	// 1. Provider LoadFor (existing).
-	if p, _ := provider.For(target); p != nil {
-		err := p.LoadFor(ctx, target, dumpPath)
-		if err == nil {
-			fmt.Fprintf(out, "imported into @%s.%s via provider %s\n", target.Site, target.Env, p.Name())
-			return nil
-		}
-		if !errors.Is(err, provider.ErrNotSupported) {
-			return fmt.Errorf("%s.LoadFor: %w", p.Name(), err)
-		}
-		fmt.Fprintf(out, "provider %s does not support LoadFor; using transport import\n", p.Name())
-	}
-
-	targetT, err := transport.For(target)
+	targetH, err := handler.For(target)
 	if err != nil {
 		return fmt.Errorf("target @%s.%s: %w", target.Site, target.Env, err)
 	}
-	if err := targetT.Available(); err != nil {
+
+	// 1. Handler DBLoader (was provider.LoadFor). Tried first because a
+	// platform-aware loader almost always beats generic drush sql:cli.
+	if loader, ok := handler.Inner(targetH).(handler.DBLoader); ok {
+		err := loader.LoadFor(ctx, target, dumpPath)
+		if err == nil {
+			fmt.Fprintf(out, "imported into @%s.%s via %s\n", target.Site, target.Env, targetH.Name())
+			return nil
+		}
+		if !errors.Is(err, provider.ErrNotSupported) {
+			return fmt.Errorf("%s.LoadFor: %w", targetH.Name(), err)
+		}
+		fmt.Fprintf(out, "%s does not support LoadFor; using transport import\n", targetH.Name())
+	}
+
+	if err := targetH.Available(); err != nil {
 		return err
 	}
 
-	// 2. Transport DBImporter (duck-typed). ddev implements this with
-	// `ddev import-db --file=<path>`, dramatically faster than feeding
-	// through drush sql:cli.
-	if imp, ok := targetT.(pkgtransport.DBImporter); ok {
-		// Plumb the target DB key through the alias so ImportDB can
-		// pick it up.
+	// 2. Handler DBImporter (duck-typed). ddev implements via
+	// `ddev import-db --file=<path>` — dramatically faster than the
+	// drush sql:cli stream-pipe.
+	if imp, ok := handler.Inner(targetH).(handler.DBImporter); ok {
+		// Plumb the target DB key through the alias so ImportDB picks
+		// it up.
 		t := *target
 		if db := effectiveTargetDatabase(target, opts); db != "" {
 			t.SQL.Target.Database = db
 		}
-		fmt.Fprintf(out, "importing into @%s.%s via %s import-db\n", target.Site, target.Env, targetT.Name())
+		fmt.Fprintf(out, "importing into @%s.%s via %s import-db\n", target.Site, target.Env, targetH.Name())
 		if err := imp.ImportDB(ctx, &t, dumpPath); err != nil {
-			return fmt.Errorf("%s import-db: %w", targetT.Name(), err)
+			return fmt.Errorf("%s import-db: %w", targetH.Name(), err)
 		}
 		fmt.Fprintln(out, "sql:sync complete")
 		return nil
 	}
 
 	// 3. Fallback: drush sql:cli pipe.
-	targetBin, err := resolveBin(ctx, target, targetT)
+	targetBin, err := resolveBin(ctx, target, targetH)
 	if err != nil {
 		return fmt.Errorf("target bin: %w", err)
 	}
-	fmt.Fprintf(out, "importing into @%s.%s via %s drush sql:cli\n", target.Site, target.Env, targetT.Name())
-	if err := importFromFile(ctx, targetT, targetBin, dumpPath, target, opts); err != nil {
+	fmt.Fprintf(out, "importing into @%s.%s via %s drush sql:cli\n", target.Site, target.Env, targetH.Name())
+	if err := importFromFile(ctx, targetH, targetBin, dumpPath, target, opts); err != nil {
 		return fmt.Errorf("import: %w", err)
 	}
 	fmt.Fprintln(out, "sql:sync complete")
@@ -483,7 +493,7 @@ func openDump(opts SqlSyncOpts) (path string, cleanup func(), err error) {
 
 // dumpToFile pipes `<bin> sql:dump --gzip [--database=…]
 // [--structure-tables-list=…] [--structure-tables-key=…]` into path.
-func dumpToFile(ctx context.Context, t transport.Transport, bin *remotebin.Resolved, path string, source *alias.Alias, opts SqlSyncOpts) error {
+func dumpToFile(ctx context.Context, h handler.Handler, bin *remotebin.Resolved, path string, source *alias.Alias, opts SqlSyncOpts) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -502,13 +512,13 @@ func dumpToFile(ctx context.Context, t transport.Transport, bin *remotebin.Resol
 	args = augmentDrushContext(source, args)
 	args = append(args, dlog.DrushFlags()...)
 	cmd := bin.Argv(args)
-	dlog.Cmdf(t.Preview(cmd))
-	return t.Pipe(ctx, cmd, nil, f)
+	dlog.Cmdf(h.Preview(cmd))
+	return h.Pipe(ctx, cmd, nil, f)
 }
 
 // importFromFile streams a gzipped dump into `<bin> sql:cli
 // [--database=…]` on the target.
-func importFromFile(ctx context.Context, t transport.Transport, bin *remotebin.Resolved, path string, target *alias.Alias, opts SqlSyncOpts) error {
+func importFromFile(ctx context.Context, h handler.Handler, bin *remotebin.Resolved, path string, target *alias.Alias, opts SqlSyncOpts) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -526,6 +536,6 @@ func importFromFile(ctx context.Context, t transport.Transport, bin *remotebin.R
 	args = augmentDrushContext(target, args)
 	args = append(args, dlog.DrushFlags()...)
 	cmd := bin.Argv(args)
-	dlog.Cmdf(t.Preview(cmd))
-	return t.Pipe(ctx, cmd, gz, io.Discard)
+	dlog.Cmdf(h.Preview(cmd))
+	return h.Pipe(ctx, cmd, gz, io.Discard)
 }

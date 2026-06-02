@@ -6,52 +6,54 @@ import (
 	"io"
 
 	"github.com/dconsole/dconsole/internal/alias"
-	"github.com/dconsole/dconsole/internal/provider"
-	"github.com/dconsole/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/pkg/handler"
 )
 
-// LoginCapable is the duck-typed interface for transports and providers
-// that have a login step (interactive auth, MFA, token refresh, etc.).
-// Both provider.Provider and transport.Transport may implement it; any
-// that don't are silently skipped.
-type LoginCapable interface {
-	Login(ctx context.Context, a *alias.Alias) error
-}
-
-// Auth runs the transport/provider login flow for an alias. If both the
-// alias's provider AND transport implement LoginCapable, both are
-// invoked (provider first — providers typically own the credential
-// store). If neither does, a clear "nothing to log into" message is
-// printed.
+// Auth runs the handler chain's login flow for an alias. Each layer
+// that implements handler.LoginCapable is invoked in inner-to-outer
+// order — inner layers typically own credentials (Skpr's CLI, ddev
+// launch), outer layers might add bastion-style auth (rare).
+//
+// If no layer implements Login, a clear "nothing to log into" message
+// is printed rather than failing.
 func Auth(ctx context.Context, a *alias.Alias, out io.Writer) error {
-	ran := 0
-
-	if p, _ := provider.For(a); p != nil {
-		if lc, ok := p.(LoginCapable); ok {
-			fmt.Fprintf(out, "logging in via provider %s\n", p.Name())
-			if err := lc.Login(ctx, a); err != nil {
-				return fmt.Errorf("%s login: %w", p.Name(), err)
-			}
-			ran++
-		}
+	h, err := handler.For(a)
+	if err != nil {
+		return err
 	}
 
-	if t, err := transport.For(a); err == nil {
-		if lc, ok := t.(LoginCapable); ok {
-			fmt.Fprintf(out, "logging in via transport %s\n", t.Name())
-			if err := lc.Login(ctx, a); err != nil {
-				return fmt.Errorf("%s login: %w", t.Name(), err)
-			}
-			ran++
+	layers := flattenForLogin(h)
+	ran := 0
+	for _, l := range layers {
+		lc, ok := l.(handler.LoginCapable)
+		if !ok {
+			continue
 		}
+		fmt.Fprintf(out, "logging in via %s\n", l.Name())
+		if err := lc.Login(ctx, a); err != nil {
+			return fmt.Errorf("%s login: %w", l.Name(), err)
+		}
+		ran++
 	}
 
 	if ran == 0 {
-		fmt.Fprintf(out, "@%s.%s has no login step (transport=%s", a.Site, a.Env, a.Transport.Type)
-		if a.Provider.Type != "" {
-			fmt.Fprintf(out, ", provider=%s", a.Provider.Type)
-		}
-		fmt.Fprintln(out, ")")
+		fmt.Fprintf(out, "@%s.%s has no login step (handler=%s)\n", a.Site, a.Env, h.Name())
 	}
 	return nil
+}
+
+// flattenForLogin returns the chain layers in inner-to-outer order so
+// credential-owning layers (the innermost, where the platform CLI
+// lives) run first. For a single handler the slice contains just that
+// handler.
+func flattenForLogin(h handler.Handler) []handler.Handler {
+	if c, ok := h.(*handler.Chain); ok {
+		ls := c.Layers()
+		out := make([]handler.Handler, 0, len(ls))
+		for i := len(ls) - 1; i >= 0; i-- {
+			out = append(out, ls[i])
+		}
+		return out
+	}
+	return []handler.Handler{h}
 }

@@ -3,10 +3,13 @@ package command
 import (
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 
 	"github.com/dconsole/dconsole/internal/alias"
 	"github.com/dconsole/dconsole/internal/provider"
+	"github.com/dconsole/dconsole/pkg/handler"
+	pkgtransport "github.com/dconsole/dconsole/pkg/transport"
 )
 
 // fakeprovider is a test-only Provider registered at init() so we can
@@ -51,7 +54,48 @@ func init() {
 			return &fakeprovider{cfg: w.Fake}, nil
 		},
 	})
+	// Also register as a handler so pkg/handler.For can dispatch to it
+	// when an alias declares `transport: { type: fake }` or the new
+	// `handler: { type: fake }` form. The fake satisfies both
+	// transport.Transport and handler.Handler via the no-op methods
+	// added below.
+	pkgtransport.Register("fake", pkgtransport.Registration{
+		Build: func(a *alias.Alias) (pkgtransport.Transport, error) {
+			var w struct {
+				Fake fakeProviderConfig `yaml:"fake"`
+			}
+			// Decode from whichever schema the test alias used.
+			if a.Handler.Type == "fake" && a.Handler.Raw.Kind != 0 {
+				_ = a.Handler.Decode(&w)
+			} else if a.Provider.Type == "fake" {
+				_ = a.Provider.Decode(&w)
+			} else if a.Transport.Type == "fake" {
+				_ = a.Transport.Decode(&w)
+			}
+			return &fakeprovider{cfg: w.Fake}, nil
+		},
+	})
 }
+
+// Exec/Pipe/Shell/Preview satisfy handler.Handler. The fake doesn't
+// forward argv (no test exercises that path); the high-level methods
+// (SyncTo, DumpFor, etc.) are what the tests actually invoke.
+func (f *fakeprovider) Exec(ctx context.Context, cmd []string, stdio handler.Stdio) error {
+	return fmt.Errorf("fakeprovider.Exec not implemented (test only calls SyncTo/DumpFor/LoadFor): %v", cmd)
+}
+func (f *fakeprovider) Pipe(ctx context.Context, cmd []string, in io.Reader, out io.Writer) error {
+	return fmt.Errorf("fakeprovider.Pipe not implemented: %v", cmd)
+}
+func (f *fakeprovider) Shell(ctx context.Context, workDir string) error {
+	return fmt.Errorf("fakeprovider.Shell not implemented")
+}
+func (f *fakeprovider) Preview(cmd []string) []string {
+	return append([]string{"fake"}, cmd...)
+}
+func (f *fakeprovider) Wrap(inner []string) []string {
+	return append([]string{"fake"}, inner...)
+}
+func (f *fakeprovider) Available() error { return nil }
 
 func (f *fakeprovider) Name() string { return "fake" }
 

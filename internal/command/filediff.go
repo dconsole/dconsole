@@ -12,7 +12,7 @@ import (
 
 	"github.com/dconsole/dconsole/internal/alias"
 	"github.com/dconsole/dconsole/internal/dlog"
-	"github.com/dconsole/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/pkg/handler"
 )
 
 // FileEntry is one row from the remote `find` invocation: a path
@@ -30,7 +30,7 @@ type FileMap map[string]FileEntry
 // scanRemote runs `find <absRoot> -type f -printf '%P\t%T@\t%s\n'` over
 // the alias's transport, captures stdout, and parses it into a FileMap.
 // Empty / missing directory returns an empty map (no error).
-func scanRemote(ctx context.Context, t transport.Transport, absRoot string) (FileMap, error) {
+func scanRemote(ctx context.Context, t handler.Handler, absRoot string) (FileMap, error) {
 	cmd := []string{"find", absRoot, "-type", "f", "-printf", "%P\t%T@\t%s\n"}
 	dlog.Cmdf(t.Preview(cmd))
 	var stdout bytes.Buffer
@@ -44,8 +44,8 @@ func scanRemote(ctx context.Context, t transport.Transport, absRoot string) (Fil
 // (targetT, dstAbs) in parallel. Wall-time becomes max(src, dst)
 // instead of sum.
 func scanRemoteConcurrent(ctx context.Context,
-	sourceT transport.Transport, srcAbs string,
-	targetT transport.Transport, dstAbs string,
+	sourceT handler.Handler, srcAbs string,
+	targetT handler.Handler, dstAbs string,
 ) (srcFiles, tgtFiles FileMap, err error) {
 
 	var (
@@ -155,8 +155,8 @@ func diffSets(source, target FileMap) (changed, deletedOnTarget []string) {
 // them. dconsole stays the middle relay; the two ends never need
 // direct connectivity.
 func streamChanged(ctx context.Context,
-	sourceT transport.Transport, srcAbs string,
-	targetT transport.Transport, dstAbs string,
+	sourceT handler.Handler, srcAbs string,
+	targetT handler.Handler, dstAbs string,
 	changed []string,
 ) error {
 	if len(changed) == 0 {
@@ -201,7 +201,7 @@ func streamChanged(ctx context.Context,
 // target. Used by --delete in diff mode. Implementation chunks paths
 // into a single `xargs rm -f` over the transport's stdin so we don't
 // spawn one rm per file. Empty paths are a no-op.
-func removeOnTarget(ctx context.Context, targetT transport.Transport, dstAbs string, paths []string) error {
+func removeOnTarget(ctx context.Context, targetT handler.Handler, dstAbs string, paths []string) error {
 	if len(paths) == 0 {
 		return nil
 	}

@@ -17,8 +17,7 @@ import (
 	"github.com/dconsole/dconsole/internal/dlog"
 	"github.com/dconsole/dconsole/internal/provider"
 	"github.com/dconsole/dconsole/internal/sitepath"
-	pkgtransport "github.com/dconsole/dconsole/pkg/transport"
-	"github.com/dconsole/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/pkg/handler"
 )
 
 // Endpoint identifies a file location for `dconsole rsync`. Exactly one of
@@ -195,23 +194,28 @@ func effectivePathspecs(endpointPS string, opts RsyncOpts) []string {
 // syncOnePathspec handles a single pathspec end-to-end: provider
 // hooks first, then mode dispatch.
 func syncOnePathspec(ctx context.Context, source, target *alias.Alias, ps string, out io.Writer, opts RsyncOpts) error {
-	// 1. Provider SyncFilesTo — full end-to-end takeover. Skpr image
+	sourceH, err := handler.For(source)
+	if err != nil {
+		return fmt.Errorf("source @%s.%s: %w", source.Site, source.Env, err)
+	}
+
+	// 1. Handler FilesSyncer — full end-to-end takeover. Skpr image
 	//    pulls fall here.
-	if p, _ := provider.For(source); p != nil {
-		err := p.SyncFilesTo(ctx, source, target)
+	if syncer, ok := handler.Inner(sourceH).(handler.FilesSyncer); ok {
+		err := syncer.SyncFilesTo(ctx, source, target)
 		if err == nil {
-			fmt.Fprintf(out, "synced assets (%s) via provider %s (end-to-end)\n", ps, p.Name())
+			fmt.Fprintf(out, "synced assets (%s) via %s (end-to-end)\n", ps, sourceH.Name())
 			return nil
 		}
 		if !errors.Is(err, provider.ErrNotSupported) {
-			return fmt.Errorf("%s.SyncFilesTo: %w", p.Name(), err)
+			return fmt.Errorf("%s.SyncFilesTo: %w", sourceH.Name(), err)
 		}
 	}
 
-	// 2. Provider FilesDownload + LoadFilesFor — provider supplies the
-	//    bundle, dconsole loads it.
-	if p, _ := provider.For(source); p != nil {
-		bundle, cleanup, err := tryProviderBundle(ctx, p, source, ps, out, opts)
+	// 2. Handler FilesDownload + LoadFilesFor — supplies the bundle,
+	//    dconsole loads it.
+	if downloader, ok := handler.Inner(sourceH).(handler.FilesDownloader); ok {
+		bundle, cleanup, err := tryHandlerBundle(ctx, sourceH, downloader, source, ps, out, opts)
 		if err == nil {
 			defer cleanup()
 			return loadProviderBundle(ctx, target, bundle, out)
@@ -248,15 +252,15 @@ func syncOnePathspec(ctx context.Context, source, target *alias.Alias, ps string
 // resolvePathspecEnds asks each side's sitepath for the absolute path
 // of the named pathspec and returns the pair.
 func resolvePathspecEnds(ctx context.Context, source, target *alias.Alias, ps string) (string, string, error) {
-	srcT, err := transport.For(source)
+	srcH, err := handler.For(source)
 	if err != nil {
-		return "", "", fmt.Errorf("source transport: %w", err)
+		return "", "", fmt.Errorf("source handler: %w", err)
 	}
-	srcBin, err := resolveBin(ctx, source, srcT)
+	srcBin, err := resolveBin(ctx, source, srcH)
 	if err != nil {
 		return "", "", fmt.Errorf("source bin: %w", err)
 	}
-	srcPaths, err := sitepath.Resolve(ctx, source, srcBin, &transportProber{t: srcT})
+	srcPaths, err := sitepath.Resolve(ctx, source, srcBin, &transportProber{h: srcH})
 	if err != nil {
 		return "", "", fmt.Errorf("source sitepath: %w", err)
 	}
@@ -265,15 +269,15 @@ func resolvePathspecEnds(ctx context.Context, source, target *alias.Alias, ps st
 		return "", "", err
 	}
 
-	tgtT, err := transport.For(target)
+	tgtH, err := handler.For(target)
 	if err != nil {
-		return "", "", fmt.Errorf("target transport: %w", err)
+		return "", "", fmt.Errorf("target handler: %w", err)
 	}
-	tgtBin, err := resolveBin(ctx, target, tgtT)
+	tgtBin, err := resolveBin(ctx, target, tgtH)
 	if err != nil {
 		return "", "", fmt.Errorf("target bin: %w", err)
 	}
-	tgtPaths, err := sitepath.Resolve(ctx, target, tgtBin, &transportProber{t: tgtT})
+	tgtPaths, err := sitepath.Resolve(ctx, target, tgtBin, &transportProber{h: tgtH})
 	if err != nil {
 		return "", "", fmt.Errorf("target sitepath: %w", err)
 	}
@@ -303,10 +307,10 @@ func sitepathToken(a *alias.Alias, paths *sitepath.Paths, ps string) (string, er
 
 // diffSyncOne runs the diff mode for one pathspec.
 func diffSyncOne(ctx context.Context, source, target *alias.Alias, srcAbs, dstAbs string, out io.Writer, opts RsyncOpts) error {
-	srcT, _ := transport.For(source)
-	tgtT, _ := transport.For(target)
+	srcH, _ := handler.For(source)
+	tgtH, _ := handler.For(target)
 	fmt.Fprintf(out, "scanning @%s.%s:%s and @%s.%s:%s …\n", source.Site, source.Env, srcAbs, target.Site, target.Env, dstAbs)
-	srcFiles, tgtFiles, err := scanRemoteConcurrent(ctx, srcT, srcAbs, tgtT, dstAbs)
+	srcFiles, tgtFiles, err := scanRemoteConcurrent(ctx, srcH, srcAbs, tgtH, dstAbs)
 	if err != nil {
 		return err
 	}
@@ -315,12 +319,12 @@ func diffSyncOne(ctx context.Context, source, target *alias.Alias, srcAbs, dstAb
 	fmt.Fprintf(out, "%d changed, %d unchanged, %d only-on-target (--delete=%v)\n",
 		summary.Changed, summary.UnchangedFiles, summary.DeletedOnTarget, opts.Delete)
 	if len(changed) > 0 {
-		if err := streamChanged(ctx, srcT, srcAbs, tgtT, dstAbs, changed); err != nil {
+		if err := streamChanged(ctx, srcH, srcAbs, tgtH, dstAbs, changed); err != nil {
 			return err
 		}
 	}
 	if opts.Delete && len(deletedOnTarget) > 0 {
-		if err := removeOnTarget(ctx, tgtT, dstAbs, deletedOnTarget); err != nil {
+		if err := removeOnTarget(ctx, tgtH, dstAbs, deletedOnTarget); err != nil {
 			return err
 		}
 	}
@@ -329,14 +333,14 @@ func diffSyncOne(ctx context.Context, source, target *alias.Alias, srcAbs, dstAb
 
 // tryProviderBundle handles the provider.FilesDownload path with
 // caching. Returns ErrNotSupported when the provider declines.
-func tryProviderBundle(ctx context.Context, p provider.Provider, source *alias.Alias, ps string, out io.Writer, opts RsyncOpts) (string, func(), error) {
+func tryHandlerBundle(ctx context.Context, srcH handler.Handler, downloader handler.FilesDownloader, source *alias.Alias, ps string, out io.Writer, opts RsyncOpts) (string, func(), error) {
 	if opts.NoCache {
-		return providerDownloadAndBundle(ctx, p, source, ps, out)
+		return handlerDownloadAndBundle(ctx, downloader, source, ps, out)
 	}
 	key := assetscache.KeyFor(assetscache.KeyInputs{
 		Site:     source.Site,
 		Env:      source.Env,
-		Strategy: "provider:" + p.Name(),
+		Strategy: "provider:" + srcH.Name(),
 		Pathspec: ps,
 	})
 	if !opts.Refresh {
@@ -351,14 +355,14 @@ func tryProviderBundle(ctx context.Context, p provider.Provider, source *alias.A
 	} else {
 		_ = assetscache.Invalidate(key)
 	}
-	bundle, cleanup, err := providerDownloadAndBundle(ctx, p, source, ps, out)
+	bundle, cleanup, err := handlerDownloadAndBundle(ctx, downloader, source, ps, out)
 	if err != nil {
 		return "", nil, err
 	}
 	cached, err := assetscache.Put(key, bundle, assetscache.Metadata{
 		Site:     source.Site,
 		Env:      source.Env,
-		Strategy: "provider:" + p.Name(),
+		Strategy: "provider:" + srcH.Name(),
 		Pathspec: ps,
 	})
 	if err != nil {
@@ -370,12 +374,12 @@ func tryProviderBundle(ctx context.Context, p provider.Provider, source *alias.A
 	return cached, func() {}, nil
 }
 
-func providerDownloadAndBundle(ctx context.Context, p provider.Provider, source *alias.Alias, ps string, out io.Writer) (string, func(), error) {
+func handlerDownloadAndBundle(ctx context.Context, downloader handler.FilesDownloader, source *alias.Alias, ps string, out io.Writer) (string, func(), error) {
 	stage, err := os.MkdirTemp("", "dconsole-provider-files-")
 	if err != nil {
 		return "", nil, err
 	}
-	if err := p.FilesDownload(ctx, source, stage); err != nil {
+	if err := downloader.FilesDownload(ctx, source, stage); err != nil {
 		os.RemoveAll(stage)
 		return "", nil, err
 	}
@@ -388,22 +392,22 @@ func providerDownloadAndBundle(ctx context.Context, p provider.Provider, source 
 }
 
 func loadProviderBundle(ctx context.Context, target *alias.Alias, bundle string, out io.Writer) error {
-	if p, _ := provider.For(target); p != nil {
-		err := p.LoadFilesFor(ctx, target, bundle)
-		if err == nil {
-			fmt.Fprintf(out, "loaded bundle via provider %s\n", p.Name())
-			return nil
-		}
-		if !errors.Is(err, provider.ErrNotSupported) {
-			return fmt.Errorf("%s.LoadFilesFor: %w", p.Name(), err)
-		}
-	}
-	tgtT, err := transport.For(target)
+	tgtH, err := handler.For(target)
 	if err != nil {
 		return err
 	}
-	if imp, ok := tgtT.(pkgtransport.FilesImporter); ok {
-		fmt.Fprintf(out, "loading bundle via %s import-files\n", tgtT.Name())
+	if loader, ok := handler.Inner(tgtH).(handler.FilesLoader); ok {
+		err := loader.LoadFilesFor(ctx, target, bundle)
+		if err == nil {
+			fmt.Fprintf(out, "loaded bundle via %s\n", tgtH.Name())
+			return nil
+		}
+		if !errors.Is(err, provider.ErrNotSupported) {
+			return fmt.Errorf("%s.LoadFilesFor: %w", tgtH.Name(), err)
+		}
+	}
+	if imp, ok := handler.Inner(tgtH).(handler.FilesImporter); ok {
+		fmt.Fprintf(out, "loading bundle via %s import-files\n", tgtH.Name())
 		return imp.ImportFiles(ctx, target, bundle)
 	}
 	// Plain tar-stream: stage and push.
@@ -416,7 +420,7 @@ func loadProviderBundle(ctx context.Context, target *alias.Alias, bundle string,
 		return err
 	}
 	// Without a known target abs path, can't tar-stream-push meaningfully.
-	return fmt.Errorf("target transport %s has no native files importer; provider-bundle path falls through to per-pathspec push (use diff mode for now)", tgtT.Name())
+	return fmt.Errorf("target handler %s has no native files importer; provider-bundle path falls through to per-pathspec push (use diff mode for now)", tgtH.Name())
 }
 
 func untarLocalFile(tarball, dst string) error {
@@ -442,14 +446,14 @@ func configureStageFileProxy(ctx context.Context, source, target *alias.Alias, o
 	if source.URI == "" {
 		return fmt.Errorf("--mode=stage-file-proxy requires the source alias (@%s.%s) to declare uri:", source.Site, source.Env)
 	}
-	tgtT, err := transport.For(target)
+	tgtH, err := handler.For(target)
 	if err != nil {
 		return err
 	}
-	if err := tgtT.Available(); err != nil {
+	if err := tgtH.Available(); err != nil {
 		return err
 	}
-	bin, err := resolveBin(ctx, target, tgtT)
+	bin, err := resolveBin(ctx, target, tgtH)
 	if err != nil {
 		return err
 	}
@@ -458,15 +462,15 @@ func configureStageFileProxy(ctx context.Context, source, target *alias.Alias, o
 	enableD9 := augmentDrushContext(target, []string{"pm:enable", "stage_file_proxy", "-y"})
 	enableD9 = append(enableD9, dlog.DrushFlags()...)
 	enableCmd := bin.Argv(enableD9)
-	dlog.Cmdf(tgtT.Preview(enableCmd))
-	if err := tgtT.Exec(ctx, enableCmd, defaultStdio()); err != nil {
+	dlog.Cmdf(tgtH.Preview(enableCmd))
+	if err := tgtH.Exec(ctx, enableCmd, defaultStdio()); err != nil {
 		// Cascade to drush 8: pm-enable.
 		fmt.Fprintf(out, "drush pm:enable failed (%v); trying drush 8 pm-enable\n", err)
 		enableD8 := augmentDrushContext(target, []string{"pm-enable", "stage_file_proxy", "-y"})
 		enableD8 = append(enableD8, dlog.DrushFlags()...)
 		enableCmd8 := bin.Argv(enableD8)
-		dlog.Cmdf(tgtT.Preview(enableCmd8))
-		if err := tgtT.Exec(ctx, enableCmd8, defaultStdio()); err != nil {
+		dlog.Cmdf(tgtH.Preview(enableCmd8))
+		if err := tgtH.Exec(ctx, enableCmd8, defaultStdio()); err != nil {
 			return fmt.Errorf("enable stage_file_proxy on @%s.%s: %w", target.Site, target.Env, err)
 		}
 	}
@@ -475,14 +479,14 @@ func configureStageFileProxy(ctx context.Context, source, target *alias.Alias, o
 	setD9 := augmentDrushContext(target, []string{"config:set", "stage_file_proxy.settings", "origin", source.URI, "-y"})
 	setD9 = append(setD9, dlog.DrushFlags()...)
 	setCmd := bin.Argv(setD9)
-	dlog.Cmdf(tgtT.Preview(setCmd))
-	if err := tgtT.Exec(ctx, setCmd, defaultStdio()); err != nil {
+	dlog.Cmdf(tgtH.Preview(setCmd))
+	if err := tgtH.Exec(ctx, setCmd, defaultStdio()); err != nil {
 		fmt.Fprintf(out, "drush config:set failed (%v); trying drush 8 vset\n", err)
 		setD8 := augmentDrushContext(target, []string{"vset", "stage_file_proxy_origin", source.URI, "-y"})
 		setD8 = append(setD8, dlog.DrushFlags()...)
 		setCmd8 := bin.Argv(setD8)
-		dlog.Cmdf(tgtT.Preview(setCmd8))
-		if err := tgtT.Exec(ctx, setCmd8, defaultStdio()); err != nil {
+		dlog.Cmdf(tgtH.Preview(setCmd8))
+		if err := tgtH.Exec(ctx, setCmd8, defaultStdio()); err != nil {
 			return fmt.Errorf("set stage_file_proxy origin on @%s.%s: %w", target.Site, target.Env, err)
 		}
 	}
@@ -491,8 +495,8 @@ func configureStageFileProxy(ctx context.Context, source, target *alias.Alias, o
 	return nil
 }
 
-func defaultStdio() pkgtransport.Stdio {
-	return pkgtransport.Stdio{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+func defaultStdio() handler.Stdio {
+	return handler.Stdio{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
 }
 
 // readSide opens the source endpoint as an io.Reader carrying a tar
@@ -513,29 +517,31 @@ func readSide(ctx context.Context, e *Endpoint, side string) (absPath string, r 
 		return e.Local, buf, func() {}, nil
 	}
 
-	// Provider override: pull files from provider to a local stage, then
-	// tar that. Only meaningful for the `%files` token; for other paths
-	// we'd need a more specific provider API.
-	if p, _ := provider.For(e.Alias); p != nil && (e.PathSpec == "%files" || e.PathSpec == "") {
-		stage, err := os.MkdirTemp("", "dconsole-provider-*")
-		if err != nil {
-			return "", nil, func() {}, err
-		}
-		cleanup := func() { os.RemoveAll(stage) }
-		err = p.FilesDownload(ctx, e.Alias, stage)
-		if err == nil {
-			buf, err := tarLocal(ctx, stage)
+	// Handler override: pull files from a FilesDownloader handler to a
+	// local stage, then tar that. Only meaningful for the `%files`
+	// token; for other paths we'd need a more specific API.
+	if h, _ := handler.For(e.Alias); h != nil && (e.PathSpec == "%files" || e.PathSpec == "") {
+		if downloader, ok := handler.Inner(h).(handler.FilesDownloader); ok {
+			stage, err := os.MkdirTemp("", "dconsole-provider-*")
 			if err != nil {
-				cleanup()
-				return "", nil, func() {}, fmt.Errorf("%s tar of provider stage: %w", side, err)
+				return "", nil, func() {}, err
 			}
-			return stage, buf, cleanup, nil
+			cleanup := func() { os.RemoveAll(stage) }
+			err = downloader.FilesDownload(ctx, e.Alias, stage)
+			if err == nil {
+				buf, err := tarLocal(ctx, stage)
+				if err != nil {
+					cleanup()
+					return "", nil, func() {}, fmt.Errorf("%s tar of provider stage: %w", side, err)
+				}
+				return stage, buf, cleanup, nil
+			}
+			cleanup()
+			if !errors.Is(err, provider.ErrNotSupported) {
+				return "", nil, func() {}, fmt.Errorf("%s handler %s: %w", side, h.Name(), err)
+			}
+			// Fall through to generic transport tar.
 		}
-		cleanup()
-		if !errors.Is(err, provider.ErrNotSupported) {
-			return "", nil, func() {}, fmt.Errorf("%s provider %s: %w", side, p.Name(), err)
-		}
-		// Fall through to generic transport tar.
 	}
 
 	t, abs, err := remoteAbsPath(ctx, e)
@@ -573,19 +579,19 @@ func writeSide(ctx context.Context, e *Endpoint, r io.Reader, side string) (absP
 	return abs, func() {}, nil
 }
 
-func remoteAbsPath(ctx context.Context, e *Endpoint) (transport.Transport, string, error) {
-	t, err := transport.For(e.Alias)
+func remoteAbsPath(ctx context.Context, e *Endpoint) (handler.Handler, string, error) {
+	h, err := handler.For(e.Alias)
 	if err != nil {
 		return nil, "", err
 	}
-	if err := t.Available(); err != nil {
+	if err := h.Available(); err != nil {
 		return nil, "", err
 	}
-	bin, err := resolveBin(ctx, e.Alias, t)
+	bin, err := resolveBin(ctx, e.Alias, h)
 	if err != nil {
 		return nil, "", err
 	}
-	paths, err := sitepath.Resolve(ctx, e.Alias, bin, &transportProber{t: t})
+	paths, err := sitepath.Resolve(ctx, e.Alias, bin, &transportProber{h: h})
 	if err != nil {
 		return nil, "", err
 	}
@@ -593,7 +599,7 @@ func remoteAbsPath(ctx context.Context, e *Endpoint) (transport.Transport, strin
 	if err != nil {
 		return nil, "", err
 	}
-	return t, abs, nil
+	return h, abs, nil
 }
 
 func tarLocal(ctx context.Context, dir string) (*bytes.Buffer, error) {
@@ -626,11 +632,11 @@ func runLocal(ctx context.Context, argv []string, in io.Reader, out io.Writer) e
 	// alias with transport: exec, then using Pipe. This keeps process
 	// spawning logic in one place (the exec transport).
 	a := &alias.Alias{Transport: alias.NewTransport("exec", nil)}
-	t, err := transport.For(a)
+	h, err := handler.For(a)
 	if err != nil {
 		return err
 	}
-	return t.Pipe(ctx, argv, in, out)
+	return h.Pipe(ctx, argv, in, out)
 }
 
 // minimal shell-quote that's safe enough for path arguments.

@@ -58,6 +58,11 @@ func (f *fakeImportTransport) Preview(cmd []string) []string {
 	return append([]string{"fake-importer"}, cmd...)
 }
 
+// Wrap satisfies handler.Handler — identity transform for the test fake.
+func (f *fakeImportTransport) Wrap(inner []string) []string {
+	return append([]string{"fake-importer"}, inner...)
+}
+
 // ImportDB satisfies pkg/transport.DBImporter. Appends a log line so
 // tests can assert it was invoked with the expected dump path.
 func (f *fakeImportTransport) ImportDB(ctx context.Context, a *alias.Alias, dumpPath string) error {

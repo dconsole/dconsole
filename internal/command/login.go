@@ -12,21 +12,21 @@ import (
 
 	"github.com/dconsole/dconsole/internal/alias"
 	"github.com/dconsole/dconsole/internal/dlog"
-	"github.com/dconsole/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/pkg/handler"
 )
 
 // Login runs `drush user:login` on the alias and opens the resulting
 // one-time login URL in the local browser. Extra args (e.g. --name=admin,
 // --uri=…, a destination path) are forwarded to drush.
 func Login(ctx context.Context, a *alias.Alias, args []string, out io.Writer) error {
-	t, err := transport.For(a)
+	h, err := handler.For(a)
 	if err != nil {
 		return err
 	}
-	if err := t.Available(); err != nil {
+	if err := h.Available(); err != nil {
 		return err
 	}
-	bin, err := resolveBin(ctx, a, t)
+	bin, err := resolveBin(ctx, a, h)
 	if err != nil {
 		return err
 	}
@@ -46,9 +46,9 @@ func Login(ctx context.Context, a *alias.Alias, args []string, out io.Writer) er
 	drushArgs = append(drushArgs, args...)
 	drushArgs = append(drushArgs, dlog.DrushFlags()...)
 	cmd := bin.Argv(drushArgs)
-	dlog.Cmdf(t.Preview(cmd))
+	dlog.Cmdf(h.Preview(cmd))
 	var stdout, stderr bytes.Buffer
-	pipeErr := t.Pipe(ctx, cmd, nil, &stdout)
+	pipeErr := h.Pipe(ctx, cmd, nil, &stdout)
 
 	url := extractLoginURL(stdout.String())
 	if url == "" {

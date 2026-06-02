@@ -157,8 +157,8 @@ esac
 	if string(got) != dumpBody {
 		t.Errorf("imported body = %q, want %q", string(got), dumpBody)
 	}
-	if !bytes.Contains(out.Bytes(), []byte("via provider fake")) {
-		t.Errorf("output should mention provider; got:\n%s", out.String())
+	if !bytes.Contains(out.Bytes(), []byte("fake")) {
+		t.Errorf("output should mention the fake handler that supplied the dump; got:\n%s", out.String())
 	}
 }
 

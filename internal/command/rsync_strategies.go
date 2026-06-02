@@ -10,8 +10,7 @@ import (
 
 	"github.com/dconsole/dconsole/internal/alias"
 	"github.com/dconsole/dconsole/internal/dlog"
-	"github.com/dconsole/dconsole/internal/transport"
-	pkgtransport "github.com/dconsole/dconsole/pkg/transport"
+	"github.com/dconsole/dconsole/pkg/handler"
 )
 
 // errStrategyNotApplicable means "this strategy doesn't fit the
@@ -83,16 +82,16 @@ func rsyncOnly(ctx context.Context, source, target *alias.Alias, srcAbs, dstAbs 
 // trySameHostRsync runs `ssh user@host -- rsync -avz [--delete] src/ dst/`
 // when source and target share the same ssh endpoint. Strategy 1.
 func trySameHostRsync(ctx context.Context, source, target *alias.Alias, srcAbs, dstAbs string, opts RsyncOpts) error {
-	srcT, err := transport.For(source)
+	srcT, err := handler.For(source)
 	if err != nil {
 		return errStrategyNotApplicable
 	}
-	tgtT, err := transport.For(target)
+	tgtT, err := handler.For(target)
 	if err != nil {
 		return errStrategyNotApplicable
 	}
-	srcSSH, sok := srcT.(pkgtransport.RsyncSSH)
-	tgtSSH, tok := tgtT.(pkgtransport.RsyncSSH)
+	srcSSH, sok := srcT.(handler.RsyncSSH)
+	tgtSSH, tok := tgtT.(handler.RsyncSSH)
 	if !sok || !tok {
 		return errStrategyNotApplicable
 	}
@@ -123,11 +122,11 @@ func trySameHostRsync(ctx context.Context, source, target *alias.Alias, srcAbs, 
 // pushes to the target via the target's transport. Strategy 2 — the
 // standard dev-laptop case (prod ssh → local ddev or ssh).
 func tryLocalMediatedRsync(ctx context.Context, source, target *alias.Alias, srcAbs, dstAbs string, opts RsyncOpts) error {
-	srcT, err := transport.For(source)
+	srcT, err := handler.For(source)
 	if err != nil {
 		return errStrategyNotApplicable
 	}
-	srcSSH, ok := srcT.(pkgtransport.RsyncSSH)
+	srcSSH, ok := srcT.(handler.RsyncSSH)
 	if !ok {
 		return errStrategyNotApplicable
 	}
@@ -164,16 +163,16 @@ func tryLocalMediatedRsync(ctx context.Context, source, target *alias.Alias, src
 // TO target. Strategy 3 — for the prod→test cross-host case where
 // source has outbound network and credentials (agent forwarded).
 func trySourceDrivenRsync(ctx context.Context, source, target *alias.Alias, srcAbs, dstAbs string, opts RsyncOpts) error {
-	srcT, err := transport.For(source)
+	srcT, err := handler.For(source)
 	if err != nil {
 		return errStrategyNotApplicable
 	}
-	tgtT, err := transport.For(target)
+	tgtT, err := handler.For(target)
 	if err != nil {
 		return errStrategyNotApplicable
 	}
-	srcSSH, sok := srcT.(pkgtransport.RsyncSSH)
-	tgtSSH, tok := tgtT.(pkgtransport.RsyncSSH)
+	srcSSH, sok := srcT.(handler.RsyncSSH)
+	tgtSSH, tok := tgtT.(handler.RsyncSSH)
 	if !sok || !tok {
 		return errStrategyNotApplicable
 	}
@@ -210,11 +209,11 @@ func trySourceDrivenRsync(ctx context.Context, source, target *alias.Alias, srcA
 //     to ImportFiles (ddev import-files unpacks into sites/default/files).
 //   - else → tar-stream staging via target.Pipe.
 func pushStagingToTarget(ctx context.Context, target *alias.Alias, staging, dstAbs string, opts RsyncOpts) error {
-	tgtT, err := transport.For(target)
+	tgtT, err := handler.For(target)
 	if err != nil {
 		return err
 	}
-	if tgtSSH, ok := tgtT.(pkgtransport.RsyncSSH); ok {
+	if tgtSSH, ok := tgtT.(handler.RsyncSSH); ok {
 		tgtRemote, tgtOpts := tgtSSH.RsyncRemote()
 		args := []string{"-avz"}
 		if opts.Delete {
@@ -228,7 +227,7 @@ func pushStagingToTarget(ctx context.Context, target *alias.Alias, staging, dstA
 		dlog.Cmdf(cmd.Args)
 		return cmd.Run()
 	}
-	if imp, ok := tgtT.(pkgtransport.FilesImporter); ok {
+	if imp, ok := tgtT.(handler.FilesImporter); ok {
 		// Tarball the staging dir and hand to ddev import-files.
 		bundle, err := tarGzipDir(staging)
 		if err != nil {
@@ -282,7 +281,7 @@ func tarGzipDir(dir string) (string, error) {
 // tarStreamPushDir streams the contents of local `dir` into `dstAbs`
 // on the target via tar pipe — the fallback when target has neither
 // ssh-rsync nor FilesImporter (e.g. plain docker/kubectl).
-func tarStreamPushDir(ctx context.Context, t transport.Transport, dir, dstAbs string) error {
+func tarStreamPushDir(ctx context.Context, h handler.Handler, dir, dstAbs string) error {
 	srcCmd := exec.Command("tar", "czf", "-", "-C", dir, ".")
 	srcOut, err := srcCmd.StdoutPipe()
 	if err != nil {
@@ -294,8 +293,8 @@ func tarStreamPushDir(ctx context.Context, t transport.Transport, dir, dstAbs st
 	}
 	dstCmd := []string{"tar", "xzf", "-", "-C", dstAbs}
 	dlog.Cmdf(append([]string{"tar", "czf", "-", "-C", dir, "."}, "|", "(relay)", "|"))
-	dlog.Cmdf(t.Preview(dstCmd))
-	tgtErr := t.Pipe(ctx, dstCmd, srcOut, io.Discard)
+	dlog.Cmdf(h.Preview(dstCmd))
+	tgtErr := h.Pipe(ctx, dstCmd, srcOut, io.Discard)
 	if waitErr := srcCmd.Wait(); waitErr != nil && tgtErr == nil {
 		return fmt.Errorf("local tar: %w", waitErr)
 	}

@@ -13,7 +13,7 @@ import (
 
 	"github.com/dconsole/dconsole/internal/alias"
 	"github.com/dconsole/dconsole/internal/dlog"
-	"github.com/dconsole/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/pkg/handler"
 )
 
 func helpDebug(format string, args ...any) {
@@ -92,18 +92,18 @@ func Help(ctx context.Context, a *alias.Alias, out io.Writer, fallback func(io.W
 		fallback(out)
 		return nil
 	}
-	t, err := transport.For(a)
+	h, err := handler.For(a)
 	if err != nil {
-		helpDebug("transport.For: %v", err)
+		helpDebug("handler.For: %v", err)
 		fallback(out)
 		return nil
 	}
-	if err := t.Available(); err != nil {
-		helpDebug("transport %s not available: %v", t.Name(), err)
+	if err := h.Available(); err != nil {
+		helpDebug("handler %s not available: %v", h.Name(), err)
 		fallback(out)
 		return nil
 	}
-	bin, err := resolveBin(ctx, a, t)
+	bin, err := resolveBin(ctx, a, h)
 	if err != nil {
 		helpDebug("resolveBin: %v", err)
 		fallback(out)
@@ -113,8 +113,8 @@ func Help(ctx context.Context, a *alias.Alias, out io.Writer, fallback func(io.W
 	// Try drush 9+ first: list --format=json.
 	var stdout bytes.Buffer
 	cmd := bin.Argv(augmentDrushContext(a, []string{"list", "--format=json"}))
-	dlog.Cmdf(t.Preview(cmd))
-	jsonErr := t.Pipe(ctx, cmd, nil, &stdout)
+	dlog.Cmdf(h.Preview(cmd))
+	jsonErr := h.Pipe(ctx, cmd, nil, &stdout)
 	if jsonErr == nil {
 		if help, ok := tryJSON(stdout.Bytes()); ok {
 			renderMergedHelp(out, a, help)
@@ -128,8 +128,8 @@ func Help(ctx context.Context, a *alias.Alias, out io.Writer, fallback func(io.W
 	// Drush 8 fallback: parse `drush help` plain text.
 	stdout.Reset()
 	cmd = bin.Argv(augmentDrushContext(a, []string{"help"}))
-	dlog.Cmdf(t.Preview(cmd))
-	if err := t.Pipe(ctx, cmd, nil, &stdout); err != nil {
+	dlog.Cmdf(h.Preview(cmd))
+	if err := h.Pipe(ctx, cmd, nil, &stdout); err != nil {
 		helpDebug("drush help (plain text) failed: %v", err)
 		fmt.Fprintf(out, "Note: couldn't reach drush on @%s.%s (neither JSON nor plain-text help). Showing dconsole built-ins only.\n\n", a.Site, a.Env)
 		fallback(out)

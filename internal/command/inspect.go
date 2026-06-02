@@ -8,7 +8,7 @@ import (
 
 	"github.com/dconsole/dconsole/internal/alias"
 	"github.com/dconsole/dconsole/internal/remotebin"
-	"github.com/dconsole/dconsole/internal/transport"
+	"github.com/dconsole/dconsole/pkg/handler"
 )
 
 // Inspect prints what dconsole *would* do for a given argv, without
@@ -107,12 +107,12 @@ func Inspect(ctx context.Context, loader *alias.Loader, args []string, out io.Wr
 			fmt.Fprintf(out, "  then open the printed URL in the default browser\n")
 			return nil
 		}
-		t, err := transport.For(a)
+		h, err := handler.For(a)
 		if err != nil {
-			return fmt.Errorf("transport: %w", err)
+			return fmt.Errorf("handler: %w", err)
 		}
 		remoteArgv := bin.Argv(drushArgs)
-		localArgv := t.Preview(remoteArgv)
+		localArgv := h.Preview(remoteArgv)
 		fmt.Fprintf(out, "  drush user:login on @%s.%s, capture URL, open in browser\n", a.Site, a.Env)
 		fmt.Fprintf(out, "  remote argv: %s\n", quoteJoin(remoteArgv))
 		fmt.Fprintf(out, "  would run:   %s\n", quoteJoin(localArgv))
@@ -128,14 +128,14 @@ func Inspect(ctx context.Context, loader *alias.Loader, args []string, out io.Wr
 		fmt.Fprintf(out, "  forward %q to remote CLI (bin: auto — would probe `vendor/bin/drupal --version` then `drush --version` first)\n", strings.Join(rest, " "))
 		return nil
 	}
-	t, err := transport.For(a)
+	h, err := handler.For(a)
 	if err != nil {
-		return fmt.Errorf("transport: %w", err)
+		return fmt.Errorf("handler: %w", err)
 	}
 	remoteArgv := bin.Argv(rest)
-	localArgv := t.Preview(remoteArgv)
-	if err := t.Available(); err != nil {
-		fmt.Fprintf(out, "  ⚠ transport NOT available: %v\n", err)
+	localArgv := h.Preview(remoteArgv)
+	if err := h.Available(); err != nil {
+		fmt.Fprintf(out, "  ⚠ handler NOT available: %v\n", err)
 	}
 	fmt.Fprintf(out, "  forward %q to remote %s\n", strings.Join(rest, " "), bin.Kind)
 	fmt.Fprintf(out, "  remote argv: %s\n", quoteJoin(remoteArgv))
@@ -164,13 +164,13 @@ func inspectHelp(ctx context.Context, loader *alias.Loader, out io.Writer) error
 	fmt.Fprintf(out, "  uri:        %s\n", a.URI)
 	fmt.Fprintf(out, "  transport:  %s\n", a.Transport.Type)
 
-	t, err := transport.For(a)
+	h, err := handler.For(a)
 	if err != nil {
-		fmt.Fprintf(out, "  ⚠ transport.For: %v → would fall back\n", err)
+		fmt.Fprintf(out, "  ⚠ handler.For: %v → would fall back\n", err)
 		return nil
 	}
-	if err := t.Available(); err != nil {
-		fmt.Fprintf(out, "  ⚠ transport not available: %v → would fall back\n", err)
+	if err := h.Available(); err != nil {
+		fmt.Fprintf(out, "  ⚠ handler not available: %v → would fall back\n", err)
 		return nil
 	}
 	bin, ok := remotebin.Resolve(a)
@@ -181,7 +181,7 @@ func inspectHelp(ctx context.Context, loader *alias.Loader, out io.Writer) error
 		argv := bin.Argv([]string{"list", "--format=json"})
 		fmt.Fprintf(out, "  bin:        %s @ %s\n", bin.Kind, bin.Path)
 		fmt.Fprintf(out, "  remote argv: %s\n", quoteJoin(argv))
-		fmt.Fprintf(out, "  would run:   %s\n", quoteJoin(t.Preview(argv)))
+		fmt.Fprintf(out, "  would run:   %s\n", quoteJoin(h.Preview(argv)))
 	}
 	fmt.Fprintln(out, "  on success: parse JSON, merge dconsole built-ins by namespace, render drush-style listing")
 	fmt.Fprintln(out, "  on failure: fall back to dconsole-only usage (set DCONSOLE_HELP_DEBUG=1 to see why)")
