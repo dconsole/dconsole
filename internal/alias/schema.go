@@ -10,18 +10,181 @@ type AliasFile map[string]Alias
 // Alias is one environment within a site file. After resolution it also
 // carries the site name and env name it was looked up under.
 type Alias struct {
-	URI       string            `yaml:"uri,omitempty"`
-	Root      string            `yaml:"root,omitempty"`
-	Bin       RemoteBin         `yaml:"bin,omitempty"`
-	Transport Transport         `yaml:"transport,omitempty"`
-	Provider  Provider          `yaml:"provider,omitempty"`
-	SQL       SQL               `yaml:"sql,omitempty"`
-	Assets    Assets            `yaml:"assets,omitempty"`
-	Policy    Policy            `yaml:"policy,omitempty"`
-	EnvVars   map[string]string `yaml:"env_vars,omitempty"`
+	URI  string    `yaml:"uri,omitempty"`
+	Root string    `yaml:"root,omitempty"`
+	Bin  RemoteBin `yaml:"bin,omitempty"`
+
+	// Handler is the v0.4.0+ unified config. A single handler may carry
+	// a `via:` field to form a chain (e.g. ssh outer + docker inner).
+	Handler Handler `yaml:"handler,omitempty"`
+	// Handlers is the explicit-list form of a chain (mutually exclusive
+	// with Handler — picking which is mostly stylistic).
+	Handlers []Handler `yaml:"handlers,omitempty"`
+
+	// Transport / Provider are the deprecated pre-v0.4.0 fields. Still
+	// accepted on read for one minor cycle with a deprecation warning;
+	// `UnmarshalYAML` does NOT auto-rewrite them, so anything iterating
+	// over the alias in-memory needs to consult `LegacyChain()` which
+	// folds the legacy fields into a synthetic []Handler.
+	Transport Transport `yaml:"transport,omitempty"`
+	Provider  Provider  `yaml:"provider,omitempty"`
+
+	SQL     SQL               `yaml:"sql,omitempty"`
+	Assets  Assets            `yaml:"assets,omitempty"`
+	Policy  Policy            `yaml:"policy,omitempty"`
+	EnvVars map[string]string `yaml:"env_vars,omitempty"`
 
 	Site string `yaml:"-"`
 	Env  string `yaml:"-"`
+}
+
+// Handler is a single layer of the v0.4.0 handler-chain schema. Mirrors
+// the legacy Transport struct's typed-fields-plus-Raw pattern, then
+// adds `via:` so it can carry the next inner layer when chained.
+//
+//	handler:
+//	  type: ssh
+//	  ssh: { host: ..., user: ... }
+//	  via:
+//	    type: docker
+//	    docker: { container: ... }
+type Handler struct {
+	Type string `yaml:"type"`
+
+	// Typed convenience fields for in-tree handlers (one of these is
+	// non-nil depending on Type). Plugin handlers ignore these and use
+	// Raw + Decode.
+	Exec    *ExecTransport    `yaml:"exec,omitempty"`
+	SSH     *SSHTransport     `yaml:"ssh,omitempty"`
+	Docker  *DockerTransport  `yaml:"docker,omitempty"`
+	Compose *ComposeTransport `yaml:"compose,omitempty"`
+	Kubectl *KubectlTransport `yaml:"kubectl,omitempty"`
+	DDEV    *DDEVTransport    `yaml:"ddev,omitempty"`
+	Lando   *LandoTransport   `yaml:"lando,omitempty"`
+	Ahoy    *AhoyTransport    `yaml:"ahoy,omitempty"`
+
+	// Via is the next inner layer in a chain. The current layer wraps
+	// Via's argv output. Nil for single-handler aliases.
+	Via *Handler `yaml:"via,omitempty"`
+
+	// Raw is the YAML mapping for this handler (for plugin Decode).
+	Raw yaml.Node `yaml:"-"`
+}
+
+// UnmarshalYAML decodes typed fields and captures Raw so plugin
+// factories can pull their own config.
+func (h *Handler) UnmarshalYAML(n *yaml.Node) error {
+	type plain Handler
+	var p plain
+	if err := n.Decode(&p); err != nil {
+		return err
+	}
+	*h = Handler(p)
+	h.Raw = *n
+	return nil
+}
+
+// Decode unmarshals the handler's YAML block into v. Use from plugin
+// factories to pull their typed config out of the opaque mapping.
+func (h *Handler) Decode(v any) error {
+	return h.Raw.Decode(v)
+}
+
+// LegacyChain returns the alias's handler config as a flat outer-to-inner
+// list, normalising across the three schema shapes (Handler, Handlers,
+// or the deprecated Transport[+Provider] pair). Returns an empty slice
+// if nothing is configured; returns an error if multiple forms are mixed.
+//
+// The legacy `transport: + provider:` combination is treated as a chain
+// with transport outer and provider inner — preserving the intent of
+// "reach the box via transport, then run provider-flavoured ops
+// against it". Real-world hosting platforms (Skpr, Ironstar) ran their
+// CLI locally and never used a separate transport, so this case is
+// mostly defensive.
+func (a *Alias) LegacyChain() ([]Handler, error) {
+	hasHandler := a.Handler.Type != ""
+	hasHandlers := len(a.Handlers) > 0
+	hasTransport := a.Transport.Type != ""
+	hasProvider := a.Provider.Type != ""
+
+	switch {
+	case hasHandler && hasHandlers:
+		return nil, fmtErr(a, "defines both `handler:` and `handlers:` — pick one")
+	case (hasHandler || hasHandlers) && (hasTransport || hasProvider):
+		return nil, fmtErr(a, "mixes the new `handler:`/`handlers:` schema with the deprecated `transport:`/`provider:` schema — pick one")
+	case hasHandlers:
+		return a.Handlers, nil
+	case hasHandler:
+		return flattenVia(a.Handler), nil
+	case hasTransport && hasProvider:
+		return []Handler{
+			handlerFromTransport(a.Transport),
+			handlerFromProvider(a.Provider),
+		}, nil
+	case hasTransport:
+		return []Handler{handlerFromTransport(a.Transport)}, nil
+	case hasProvider:
+		return []Handler{handlerFromProvider(a.Provider)}, nil
+	}
+	return nil, nil
+}
+
+// flattenVia walks the .Via chain of a singular handler into a flat
+// slice, outer first.
+func flattenVia(h Handler) []Handler {
+	out := []Handler{h}
+	// Strip the chain link off the head we record, so each entry stands
+	// alone (otherwise the head carries its own via pointer too).
+	out[0].Via = nil
+	for via := h.Via; via != nil; via = via.Via {
+		copy := *via
+		copy.Via = nil
+		out = append(out, copy)
+	}
+	return out
+}
+
+// handlerFromTransport copies a legacy Transport block into the new
+// Handler shape. The two have the same typed-fields layout so this is
+// largely a field-by-field move.
+func handlerFromTransport(t Transport) Handler {
+	return Handler{
+		Type:    t.Type,
+		Exec:    t.Exec,
+		SSH:     t.SSH,
+		Docker:  t.Docker,
+		Compose: t.Compose,
+		Kubectl: t.Kubectl,
+		DDEV:    t.DDEV,
+		Lando:   t.Lando,
+		Raw:     t.Raw,
+	}
+}
+
+// handlerFromProvider copies a legacy Provider block into the new
+// Handler shape. Providers had no typed fields — only Type + Raw — so
+// downstream factories rely on Raw.Decode for their own config.
+func handlerFromProvider(p Provider) Handler {
+	return Handler{
+		Type: p.Type,
+		Raw:  p.Raw,
+	}
+}
+
+// fmtErr formats a per-alias error with the same `@site.env` decoration
+// pkg/handler.For() uses, keeping error messages consistent across
+// load + dispatch.
+func fmtErr(a *Alias, msg string) error {
+	return &aliasError{site: a.Site, env: a.Env, msg: msg}
+}
+
+type aliasError struct{ site, env, msg string }
+
+func (e *aliasError) Error() string {
+	if e.site == "" && e.env == "" {
+		return e.msg
+	}
+	return "@" + e.site + "." + e.env + ": " + e.msg
 }
 
 // Assets configures `dconsole rsync` behaviour for the alias's files
