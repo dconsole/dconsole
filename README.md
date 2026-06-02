@@ -151,6 +151,16 @@ Each file is a YAML map keyed by environment name. A reserved
 
 ### Schema
 
+dconsole accepts two equivalent ways of declaring how to reach an
+environment:
+
+- **`handler:`** (v0.4.0+) — singular block, optionally with `via:` for
+  a chain (e.g. ssh outer + docker inner)
+- **`handlers: [...]`** (v0.4.0+) — explicit list form of a chain
+- **`transport:`** + **`provider:`** (legacy, pre-v0.4.0) — still
+  accepted; dconsole auto-migrates `transport + provider` into a
+  2-layer chain
+
 ```yaml
 _defaults:
   bin:
@@ -163,7 +173,19 @@ _defaults:
 dev:
   uri: https://dev.example.com
   root: /var/www/dev
-  transport: { type: ddev, ddev: { project: example } }
+  handler: { type: ddev, ddev: { project: example } }
+
+# Chain example — ssh into a prod server, then docker-exec into the
+# Drupal container. The outer layer wraps the inner.
+prod:
+  uri: https://prod.example.com
+  root: /var/www/html
+  handler:
+    type: ssh
+    ssh: { host: prod.example.com, user: deploy }
+    via:
+      type: docker
+      docker: { container: drupal-app }
 
   # Optional: per-env policy. "protected" rejects sync with envs
   # not listed in allow_sync_from / allow_sync_to. --force overrides.
