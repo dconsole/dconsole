@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/dconsole/dconsole/internal/alias"
@@ -97,8 +98,21 @@ func resolveBin(ctx context.Context, a *alias.Alias, t transport.Transport) (*re
 // a cyclic dependency between transport and remotebin.
 type transportProber struct{ t transport.Transport }
 
+// Run executes a probe (no stdin, captured stdout) and SUPPRESSES the
+// remote command's stderr on the user's terminal. Auto-probe routinely
+// tries candidates that don't exist (e.g. `drupal --version` on a
+// drush-only site) — letting the remote shell's "command not found"
+// noise leak through would make every successful run look like an
+// error. On failure we wrap the captured stderr into the returned
+// error so -v / -vv users can still diagnose what happened.
+//
+// Uses Exec (which lets us thread a stderr writer) rather than Pipe
+// (which hardcodes stderr to os.Stderr).
 func (p *transportProber) Run(ctx context.Context, cmd []string) ([]byte, error) {
-	var stdout bytes.Buffer
-	err := p.t.Pipe(ctx, cmd, nil, &stdout)
+	var stdout, stderr bytes.Buffer
+	err := p.t.Exec(ctx, cmd, transport.Stdio{Out: &stdout, Err: &stderr})
+	if err != nil && stderr.Len() > 0 {
+		return stdout.Bytes(), fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+	}
 	return stdout.Bytes(), err
 }
