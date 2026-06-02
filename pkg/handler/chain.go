@@ -126,6 +126,23 @@ func (c *Chain) Shell(ctx context.Context, workDir string) error {
 	return c.Outer().Shell(ctx, workDir)
 }
 
+// Inner returns the innermost concrete handler — useful for capability
+// type assertions. For a non-chain handler it's the identity. For a
+// chain it's the layer closest to drush, where DBImporter / DBSyncer /
+// etc. capabilities resolve. Convention:
+//
+//	if s, ok := handler.Inner(h).(handler.DBImporter); ok { … }
+//
+// Chains don't bubble capabilities to themselves because the outer
+// layers (ssh, ssh-jump) don't know how to import a local file into
+// the container — only the innermost layer does.
+func Inner(h Handler) Handler {
+	if c, ok := h.(*Chain); ok {
+		return c.Inner()
+	}
+	return h
+}
+
 // joinChainNames produces "ssh→docker" for inspect/error output.
 func joinChainNames(names []string) string {
 	if len(names) == 0 {
