@@ -20,46 +20,35 @@ import (
 // generic pipe-to-drush fallback. ddev implements it via
 // `ddev import-db`; other transports can opt in later.
 //
-// dumpPath is a local path to a gzipped SQL file. Implementations are
-// responsible for un-gzipping if their tool needs it (ddev import-db
-// accepts .sql.gz natively).
+// Deprecated (v0.4.0): use pkg/handler.DBImporter. The signature is
+// identical and existing implementations satisfy both. After call
+// sites migrate to handler.For, this declaration is removed.
 type DBImporter interface {
 	ImportDB(ctx context.Context, a *alias.Alias, dumpPath string) error
 }
 
-// FilesImporter is the asset-bundle sibling of DBImporter. The rsync
-// orchestrator type-asserts each target transport against this when
-// loading a provider-supplied bundle, preferring it over the
-// tar-stream-unpack fallback. ddev implements via `ddev import-files`.
+// FilesImporter is the asset-bundle sibling of DBImporter.
 //
-// bundlePath is a local path to a gzipped tarball of the files tree
-// (relative paths inside the archive map to the target's files dir).
+// Deprecated (v0.4.0): use pkg/handler.FilesImporter.
 type FilesImporter interface {
 	ImportFiles(ctx context.Context, a *alias.Alias, bundlePath string) error
 }
 
 // RsyncSSH is an optional capability a Transport implements when it
 // represents an ssh-reachable endpoint suitable for the rsync binary.
-// `remote` is the user@host:port-or-host argument; `sshOpts` is the
-// arg slice for `-e "ssh <opts>"` (identity file, options, etc.).
-// Used only by the rsync mode and the auto-mode strategy chain.
+//
+// Deprecated (v0.4.0): use pkg/handler.RsyncSSH.
 type RsyncSSH interface {
 	RsyncRemote() (remote string, sshOpts []string)
 }
 
-// Transport reaches a remote environment described by an Alias. Each
-// implementation wraps a CLI on $PATH (ssh, docker, kubectl, ddev, …) or
-// proxies to a subprocess plugin.
+// Transport reaches a remote environment described by an Alias.
 //
-// Method contract:
-//   - Name returns the transport type as it appears in alias YAML (e.g. "ssh").
-//   - Available reports whether the transport's runtime prerequisites are met
-//     for the configured alias (e.g. ssh host reachable, ddev project exists).
-//   - Exec runs a single remote command, wiring TTYs through to the user.
-//   - Pipe runs a command with explicit stdin/stdout streams — used for
-//     sql:dump streaming, file fetches, etc.
-//   - Shell drops the user into an interactive shell on the remote.
-//   - Preview returns the LOCAL argv that Exec would spawn, for inspect output.
+// Deprecated (v0.4.0): use pkg/handler.Handler, which is a superset
+// (mandatory Wrap() for chain composition + all of pkg/provider's
+// platform-op methods as duck-typed capabilities). Every in-tree
+// transport already satisfies handler.Handler. New code should call
+// handler.For(a); call sites are being migrated. See pkg/handler/doc.go.
 type Transport interface {
 	Name() string
 	Available() error
