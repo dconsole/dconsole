@@ -67,6 +67,11 @@ func (h *ahoyTransport) Preview(remoteCmd []string) []string {
 	return h.build(context.Background(), remoteCmd).Args
 }
 
+// Wrap returns the LOCAL argv that ahoy will spawn to dispatch to the
+// configured task (typically `ahoy drush ...`). Required by
+// pkg/handler.Handler.
+func (h *ahoyTransport) Wrap(inner []string) []string { return h.Preview(inner) }
+
 func (h *ahoyTransport) Shell(ctx context.Context, workDir string) error {
 	// `ahoy` itself has no shell verb; users typically define a `shell`
 	// task in .ahoy.yml. If they have, this invokes it.

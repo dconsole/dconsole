@@ -83,6 +83,10 @@ func (d *ddevTransport) Preview(remoteCmd []string) []string {
 	return d.build(context.Background(), remoteCmd).Args
 }
 
+// Wrap returns the LOCAL argv that ddev will spawn to forward `inner`
+// into the project's web container. Required by pkg/handler.Handler.
+func (d *ddevTransport) Wrap(inner []string) []string { return d.Preview(inner) }
+
 // ImportDB satisfies pkg/transport.DBImporter so sql:sync uses
 // `ddev import-db --file=<dump.sql.gz>` instead of streaming bytes
 // through drush sql:cli — significantly faster for large dumps. The

@@ -60,6 +60,12 @@ func (s *sshTransport) Preview(remoteCmd []string) []string {
 	return append([]string{"ssh"}, s.sshArgs(remoteCmd)...)
 }
 
+// Wrap returns the full LOCAL argv that ssh will spawn to forward
+// `inner` to the remote — `ssh [opts] user@host -- "<shell-quoted inner>"`.
+// Required by pkg/handler.Handler. Implemented as a thin call to
+// Preview; both return the same shape.
+func (s *sshTransport) Wrap(inner []string) []string { return s.Preview(inner) }
+
 func (s *sshTransport) Shell(ctx context.Context, workDir string) error {
 	// `ssh -t` forces TTY allocation; we cd into workDir then exec a
 	// login shell so the user lands in their normal environment.

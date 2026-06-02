@@ -69,6 +69,11 @@ func (c *composeTransport) Preview(remoteCmd []string) []string {
 	return c.build(context.Background(), remoteCmd).Args
 }
 
+// Wrap returns the LOCAL argv that `docker compose exec` will spawn
+// to forward `inner` into the service container. Required by
+// pkg/handler.Handler.
+func (c *composeTransport) Wrap(inner []string) []string { return c.Preview(inner) }
+
 func (c *composeTransport) Shell(ctx context.Context, workDir string) error {
 	args := []string{"compose"}
 	if c.cfg.ProjectDir != "" {

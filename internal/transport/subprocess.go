@@ -166,6 +166,13 @@ func (s *subprocessTransport) fallbackPreview(remoteCmd []string) []string {
 	return out
 }
 
+// Wrap returns the LOCAL argv the subprocess plugin will be spawned
+// with — typically `dconsole-<type> exec --alias-json=<...> -- <inner>`.
+// Required by pkg/handler.Handler so plugin handlers can participate
+// in chains. Defers to Preview, which already queries the plugin's
+// `preview` verb (or falls back to the standard verb argv shape).
+func (s *subprocessTransport) Wrap(inner []string) []string { return s.Preview(inner) }
+
 // command builds an *exec.Cmd for the given verb + remote command.
 // alias-json is passed as --alias-json=<path>; remoteCmd follows after
 // a literal "--" separator so the plugin can distinguish its own flags

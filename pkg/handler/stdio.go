@@ -2,20 +2,12 @@
 
 package handler
 
-import (
-	"io"
-	"os"
-)
+import "github.com/dconsole/dconsole/pkg/transport"
 
-// Stdio bundles the three I/O streams for a child process. Nil fields
-// default to the dconsole process's own streams at exec time.
-type Stdio struct {
-	In  io.Reader
-	Out io.Writer
-	Err io.Writer
-}
+// Stdio is a type alias to pkg/transport.Stdio while both packages
+// coexist during the v0.4.0 migration. Once pkg/transport is removed,
+// the canonical definition will move here.
+type Stdio = transport.Stdio
 
-// DefaultStdio wires a child to the dconsole process's own streams.
-func DefaultStdio() Stdio {
-	return Stdio{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
-}
+// DefaultStdio re-exports transport.DefaultStdio for the same reason.
+var DefaultStdio = transport.DefaultStdio

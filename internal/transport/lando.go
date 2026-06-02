@@ -72,6 +72,10 @@ func (l *landoTransport) Preview(remoteCmd []string) []string {
 	return l.build(context.Background(), remoteCmd).Args
 }
 
+// Wrap returns the LOCAL argv that lando will spawn to forward
+// `inner` into the app service. Required by pkg/handler.Handler.
+func (l *landoTransport) Wrap(inner []string) []string { return l.Preview(inner) }
+
 func (l *landoTransport) Shell(ctx context.Context, workDir string) error {
 	service := l.cfg.Service
 	if service == "" {

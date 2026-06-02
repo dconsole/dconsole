@@ -68,6 +68,10 @@ func (d *dockerTransport) Preview(remoteCmd []string) []string {
 	return append([]string{"docker"}, d.argv(remoteCmd)...)
 }
 
+// Wrap returns the LOCAL argv that docker will spawn to forward `inner`
+// into the container. Required by pkg/handler.Handler.
+func (d *dockerTransport) Wrap(inner []string) []string { return d.Preview(inner) }
+
 func (d *dockerTransport) Shell(ctx context.Context, workDir string) error {
 	args := []string{"exec", "-it"}
 	if d.cfg.User != "" {

@@ -69,6 +69,12 @@ func (e *execTransport) Preview(remoteCmd []string) []string {
 	return remoteCmd
 }
 
+// Wrap is the identity transform — exec runs the inner argv directly,
+// so the LOCAL argv IS the inner argv. Required by pkg/handler.Handler
+// so this transport can participate in a chain (e.g. as the trivial
+// innermost layer).
+func (e *execTransport) Wrap(inner []string) []string { return inner }
+
 func (e *execTransport) Shell(ctx context.Context, workDir string) error {
 	shell := os.Getenv("SHELL")
 	if shell == "" {

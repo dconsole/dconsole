@@ -78,6 +78,10 @@ func (k *kubectlTransport) Preview(remoteCmd []string) []string {
 	return k.build(context.Background(), remoteCmd, false).Args
 }
 
+// Wrap returns the LOCAL argv that kubectl will spawn to forward
+// `inner` into the pod. Required by pkg/handler.Handler.
+func (k *kubectlTransport) Wrap(inner []string) []string { return k.Preview(inner) }
+
 func (k *kubectlTransport) Shell(ctx context.Context, workDir string) error {
 	args := []string{}
 	if k.cfg.Kubeconfig != "" {
