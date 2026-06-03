@@ -76,6 +76,21 @@ func (l *landoTransport) Preview(remoteCmd []string) []string {
 // `inner` into the app service. Required by pkg/handler.Handler.
 func (l *landoTransport) Wrap(inner []string) []string { return l.Preview(inner) }
 
+// ShellPreview returns the argv lando.Shell() would spawn — the
+// `lando ssh -s <service> -c "<shell-cmd>"` invocation rather than
+// the generic Wrap form. Used by `dconsole inspect @alias sh`.
+func (l *landoTransport) ShellPreview(workDir string) []string {
+	service := l.cfg.Service
+	if service == "" {
+		service = "appserver"
+	}
+	cdPart := ""
+	if workDir != "" {
+		cdPart = "cd " + singleQuote(workDir) + " && "
+	}
+	return []string{"lando", "ssh", "-s", service, "-c", cdPart + `exec "${SHELL:-/bin/sh}"`}
+}
+
 func (l *landoTransport) Shell(ctx context.Context, workDir string) error {
 	service := l.cfg.Service
 	if service == "" {

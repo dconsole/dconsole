@@ -87,6 +87,20 @@ func (d *ddevTransport) Preview(remoteCmd []string) []string {
 // into the project's web container. Required by pkg/handler.Handler.
 func (d *ddevTransport) Wrap(inner []string) []string { return d.Preview(inner) }
 
+// ShellPreview returns the argv ddev.Shell() would spawn — `ddev ssh`
+// rather than the generic `ddev exec -- bash -l` Wrap would produce.
+// Used by `dconsole inspect @alias sh`.
+func (d *ddevTransport) ShellPreview(workDir string) []string {
+	args := []string{"ddev", "ssh"}
+	if d.cfg.Service != "" {
+		args = append(args, "-s", d.cfg.Service)
+	}
+	if workDir != "" {
+		args = append(args, "-d", workDir)
+	}
+	return args
+}
+
 // ImportDB satisfies pkg/transport.DBImporter so sql:sync uses
 // `ddev import-db --file=<dump.sql.gz>` instead of streaming bytes
 // through drush sql:cli — significantly faster for large dumps. The

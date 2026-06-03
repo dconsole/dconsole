@@ -82,6 +82,29 @@ func (k *kubectlTransport) Preview(remoteCmd []string) []string {
 // `inner` into the pod. Required by pkg/handler.Handler.
 func (k *kubectlTransport) Wrap(inner []string) []string { return k.Preview(inner) }
 
+// ShellPreview returns the argv kubectlTransport.Shell() would spawn —
+// `kubectl [--kubeconfig …] [-n ns] exec -it <resource> [-c container]
+// -- sh -c 'cd workDir && exec "${SHELL:-/bin/sh}"'`.
+func (k *kubectlTransport) ShellPreview(workDir string) []string {
+	args := []string{"kubectl"}
+	if k.cfg.Kubeconfig != "" {
+		args = append(args, "--kubeconfig", k.cfg.Kubeconfig)
+	}
+	if k.cfg.Namespace != "" {
+		args = append(args, "-n", k.cfg.Namespace)
+	}
+	args = append(args, "exec", "-it", k.cfg.Resource)
+	if k.cfg.Container != "" {
+		args = append(args, "-c", k.cfg.Container)
+	}
+	cdPart := ""
+	if workDir != "" {
+		cdPart = "cd '" + workDir + "' && "
+	}
+	args = append(args, "--", "sh", "-c", cdPart+`exec "${SHELL:-/bin/sh}"`)
+	return args
+}
+
 func (k *kubectlTransport) Shell(ctx context.Context, workDir string) error {
 	args := []string{}
 	if k.cfg.Kubeconfig != "" {

@@ -77,6 +77,31 @@ func (s *sshTransport) WrapShell(inner []string) []string {
 	return out
 }
 
+// ShellPreview returns the argv sshTransport.Shell() would spawn —
+// matches its existing implementation exactly: `ssh -t [opts]
+// user@host -- 'cd workDir && exec "$SHELL" -l'`. Used by
+// `dconsole inspect @alias sh` for single-handler ssh aliases.
+func (s *sshTransport) ShellPreview(workDir string) []string {
+	target := s.cfg.Host
+	if s.cfg.User != "" {
+		target = s.cfg.User + "@" + s.cfg.Host
+	}
+	args := []string{"ssh", "-t"}
+	if s.cfg.Port != 0 {
+		args = append(args, "-p", strconv.Itoa(s.cfg.Port))
+	}
+	if path := expandIdentityPath(s.cfg.IdentityFile); path != "" {
+		args = append(args, "-i", path, "-o", "IdentitiesOnly=yes")
+	}
+	args = append(args, expandSSHOptions(s.cfg.Options)...)
+	cdCmd := ""
+	if workDir != "" {
+		cdCmd = "cd " + singleQuote(workDir) + " && "
+	}
+	args = append(args, target, "--", cdCmd+`exec "$SHELL" -l`)
+	return args
+}
+
 func (s *sshTransport) Shell(ctx context.Context, workDir string) error {
 	// `ssh -t` forces TTY allocation; we cd into workDir then exec a
 	// login shell so the user lands in their normal environment.

@@ -72,6 +72,22 @@ func (d *dockerTransport) Preview(remoteCmd []string) []string {
 // into the container. Required by pkg/handler.Handler.
 func (d *dockerTransport) Wrap(inner []string) []string { return d.Preview(inner) }
 
+// ShellPreview returns the argv dockerTransport.Shell() would spawn —
+// `docker exec -it [--user u] [-w workDir] <container> sh -c 'exec
+// "${SHELL:-/bin/sh}"'`.
+func (d *dockerTransport) ShellPreview(workDir string) []string {
+	args := []string{"docker", "exec", "-it"}
+	if d.cfg.User != "" {
+		args = append(args, "--user", d.cfg.User)
+	}
+	args = append(args, d.cfg.ExecOptions...)
+	if workDir != "" {
+		args = append(args, "-w", workDir)
+	}
+	args = append(args, d.cfg.Container, "sh", "-c", `exec "${SHELL:-/bin/sh}"`)
+	return args
+}
+
 func (d *dockerTransport) Shell(ctx context.Context, workDir string) error {
 	args := []string{"exec", "-it"}
 	if d.cfg.User != "" {

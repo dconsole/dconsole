@@ -89,19 +89,11 @@ func Inspect(ctx context.Context, loader *alias.Loader, args []string, out io.Wr
 			return nil
 		}
 		if chain, isChain := h.(*handler.Chain); isChain {
-			argv := handler.ShellArgv(h)
 			fmt.Fprintf(out, "  chain:       %s\n", chain.Name())
-			fmt.Fprintf(out, "  would run:   %s\n", quoteJoin(argv))
 		} else {
-			// Single-handler aliases use the handler's own Shell()
-			// which may add workDir-cd and other niceties ShellArgv
-			// doesn't replicate. Print both: the best-effort argv
-			// (what a chain WOULD produce) plus a note that the
-			// single-handler path may differ.
-			argv := handler.ShellArgv(h)
 			fmt.Fprintf(out, "  handler:     %s\n", h.Name())
-			fmt.Fprintf(out, "  would run:   %s (approx — %s.Shell() may add cd %s)\n", quoteJoin(argv), h.Name(), workDir)
 		}
+		fmt.Fprintf(out, "  would run:   %s\n", quoteJoin(handler.ShellArgv(h, workDir)))
 		return nil
 	case "auth":
 		fmt.Fprintf(out, "  run auth flow for transport=%s", a.Transport.Type)

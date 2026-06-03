@@ -136,12 +136,8 @@ func (c *Chain) Pipe(ctx context.Context, cmd []string, in io.Reader, out io.Wri
 // layer's ShellWrapper can interpret it. (Innermost ShellWrapper
 // implementations may add their own `cd workDir &&` prefix.)
 func (c *Chain) Shell(ctx context.Context, workDir string) error {
-	// Start with a plain login-shell command and wrap from inside out.
-	// Each layer's ShellWrapper is preferred over Wrap because Wrap
-	// is built for command-forwarding (no TTY); WrapShell is for
-	// interactive shells.
-	cur := []string{"bash", "-l"}
-	for i := len(c.layers) - 1; i >= 0; i-- {
+	cur := previewShell(c.Inner(), workDir)
+	for i := len(c.layers) - 2; i >= 0; i-- {
 		if sw, ok := c.layers[i].(ShellWrapper); ok {
 			cur = sw.WrapShell(cur)
 		} else {
@@ -156,6 +152,19 @@ func (c *Chain) Shell(ctx context.Context, workDir string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// previewShell returns the argv that opens an interactive shell at
+// `h`. Prefers ShellPreviewer (matches h.Shell() exactly), then
+// ShellWrapper ([bash, -l] wrapped TTY-aware), then plain Wrap.
+func previewShell(h Handler, workDir string) []string {
+	if sp, ok := h.(ShellPreviewer); ok {
+		return sp.ShellPreview(workDir)
+	}
+	if sw, ok := h.(ShellWrapper); ok {
+		return sw.WrapShell([]string{"bash", "-l"})
+	}
+	return h.Wrap([]string{"bash", "-l"})
 }
 
 // Inner returns the innermost concrete handler — useful for capability
@@ -175,20 +184,18 @@ func Inner(h Handler) Handler {
 	return h
 }
 
-// ShellArgv returns the argv that `dconsole sh @alias` would spawn,
-// without actually running it. Inspect uses this to render the chain-
-// composed shell command in its plan section.
+// ShellArgv returns the argv that `dconsole sh @alias` would spawn.
 //
-// Composition matches Chain.Shell exactly: walk innermost-first,
-// prefer ShellWrapper (TTY-aware) over plain Wrap. For single-handler
-// aliases this is a best-effort preview — the handler's actual
-// Shell() method may add workDir-cd or other niceties that this
-// helper doesn't.
-func ShellArgv(h Handler) []string {
-	const innerShell = "bash"
+// For single-handler aliases this is the handler's own Shell()
+// argv (via ShellPreviewer) — ddev returns `ddev ssh`, not the
+// generic `ddev exec -- bash -l`. For chains it composes from
+// inside-out: the innermost layer's ShellPreview (its
+// shell-in-this-env argv) gets wrapped by each outer layer's
+// ShellWrapper. End result matches Chain.Shell's spawn exactly.
+func ShellArgv(h Handler, workDir string) []string {
 	if c, ok := h.(*Chain); ok {
-		cur := []string{innerShell, "-l"}
-		for i := len(c.layers) - 1; i >= 0; i-- {
+		cur := previewShell(c.Inner(), workDir)
+		for i := len(c.layers) - 2; i >= 0; i-- {
 			if sw, ok := c.layers[i].(ShellWrapper); ok {
 				cur = sw.WrapShell(cur)
 			} else {
@@ -197,10 +204,7 @@ func ShellArgv(h Handler) []string {
 		}
 		return cur
 	}
-	if sw, ok := h.(ShellWrapper); ok {
-		return sw.WrapShell([]string{innerShell, "-l"})
-	}
-	return h.Wrap([]string{innerShell, "-l"})
+	return previewShell(h, workDir)
 }
 
 // joinChainNames produces "ssh→docker" for inspect/error output.

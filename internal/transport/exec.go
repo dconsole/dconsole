@@ -75,6 +75,17 @@ func (e *execTransport) Preview(remoteCmd []string) []string {
 // innermost layer).
 func (e *execTransport) Wrap(inner []string) []string { return inner }
 
+// ShellPreview returns the argv execTransport.Shell() would spawn —
+// just `$SHELL -l`, or `/bin/sh -l` if SHELL is unset. workDir is
+// applied at process-spawn time, not in the argv itself.
+func (e *execTransport) ShellPreview(workDir string) []string {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+	return []string{shell, "-l"}
+}
+
 func (e *execTransport) Shell(ctx context.Context, workDir string) error {
 	shell := os.Getenv("SHELL")
 	if shell == "" {

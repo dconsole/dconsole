@@ -72,6 +72,13 @@ func (h *ahoyTransport) Preview(remoteCmd []string) []string {
 // pkg/handler.Handler.
 func (h *ahoyTransport) Wrap(inner []string) []string { return h.Preview(inner) }
 
+// ShellPreview returns the argv ahoy.Shell() would spawn — `ahoy shell`,
+// which expects users to have a `shell:` task defined in their .ahoy.yml.
+// workDir is ignored (ahoy resolves cwd from the task definition).
+func (h *ahoyTransport) ShellPreview(workDir string) []string {
+	return []string{"ahoy", "shell"}
+}
+
 func (h *ahoyTransport) Shell(ctx context.Context, workDir string) error {
 	// `ahoy` itself has no shell verb; users typically define a `shell`
 	// task in .ahoy.yml. If they have, this invokes it.

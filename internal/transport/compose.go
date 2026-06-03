@@ -90,6 +90,23 @@ func (c *composeTransport) WrapShell(inner []string) []string {
 	return args
 }
 
+// ShellPreview returns the argv composeTransport.Shell() would spawn.
+// Matches its existing Shell() implementation exactly: `docker compose
+// ... exec [-w workDir] <service> sh -c 'exec "${SHELL:-/bin/sh}"'`.
+func (c *composeTransport) ShellPreview(workDir string) []string {
+	args := []string{"docker", "compose"}
+	if c.cfg.ProjectDir != "" {
+		args = append(args, "--project-directory", c.cfg.ProjectDir)
+	}
+	args = append(args, "exec")
+	args = append(args, c.cfg.ExecOptions...)
+	if workDir != "" {
+		args = append(args, "-w", workDir)
+	}
+	args = append(args, c.cfg.Service, "sh", "-c", `exec "${SHELL:-/bin/sh}"`)
+	return args
+}
+
 func (c *composeTransport) Shell(ctx context.Context, workDir string) error {
 	args := []string{"compose"}
 	if c.cfg.ProjectDir != "" {

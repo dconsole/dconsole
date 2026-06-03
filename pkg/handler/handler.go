@@ -109,6 +109,20 @@ type FilesLoader interface {
 	LoadFilesFor(ctx context.Context, a *alias.Alias, bundlePath string) error
 }
 
+// ShellPreviewer is an optional capability: returns the LOCAL argv
+// the handler's Shell(workDir) method would spawn. Used by inspect
+// to render the actual command users will see, not the generic
+// Wrap([bash, -l]) approximation. Handlers with non-trivial Shell
+// implementations — ddev (ddev ssh), lando (lando ssh -s ...),
+// ahoy (ahoy shell), skpr (skpr shell), etc. — should implement
+// this so `dconsole inspect @alias sh` displays the truth.
+//
+// For chains, ShellArgv uses ShellPreview on the innermost layer
+// to seed the composition. Outer layers wrap via ShellWrapper.
+type ShellPreviewer interface {
+	ShellPreview(workDir string) []string
+}
+
 // ShellWrapper is the TTY-aware sibling of Wrap. Chains call WrapShell
 // when composing an interactive `dconsole sh` argv because plain Wrap
 // is built for non-interactive command forwarding — it doesn't allocate
