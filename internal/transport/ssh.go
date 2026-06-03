@@ -66,6 +66,17 @@ func (s *sshTransport) Preview(remoteCmd []string) []string {
 // Preview; both return the same shape.
 func (s *sshTransport) Wrap(inner []string) []string { return s.Preview(inner) }
 
+// WrapShell is the TTY-aware sibling of Wrap. ssh refuses to allocate
+// a pseudo-tty for the remote command without -t (or doubles it with
+// -tt) — without one, an interactive shell in the wrapped argv sees
+// `not a tty` from bash and exits immediately. Used by Chain.Shell
+// to compose a working `dconsole sh` through ssh→docker etc.
+func (s *sshTransport) WrapShell(inner []string) []string {
+	out := []string{"ssh", "-t"}
+	out = append(out, s.sshArgs(inner)...)
+	return out
+}
+
 func (s *sshTransport) Shell(ctx context.Context, workDir string) error {
 	// `ssh -t` forces TTY allocation; we cd into workDir then exec a
 	// login shell so the user lands in their normal environment.

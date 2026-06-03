@@ -108,3 +108,23 @@ type FilesDownloader interface {
 type FilesLoader interface {
 	LoadFilesFor(ctx context.Context, a *alias.Alias, bundlePath string) error
 }
+
+// ShellWrapper is the TTY-aware sibling of Wrap. Chains call WrapShell
+// when composing an interactive `dconsole sh` argv because plain Wrap
+// is built for non-interactive command forwarding — it doesn't allocate
+// a TTY (ssh skips -t, compose adds -T, etc.) and the user lands in a
+// dead shell with no terminal.
+//
+// Implementations return argv suitable for spawning an interactive
+// shell against the handler's environment: ssh adds -t, docker/compose
+// drop their -T-style flags and pass through stdin, kubectl adds -it,
+// etc. Handlers that don't implement ShellWrapper just have their
+// regular Wrap used as a fallback.
+//
+// For single-handler aliases dconsole sh continues to call the
+// handler's own Shell(workDir) method — ShellWrapper only kicks in
+// for chains, where composing the right TTY argv across layers
+// requires per-layer cooperation.
+type ShellWrapper interface {
+	WrapShell(inner []string) []string
+}

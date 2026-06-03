@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 )
 
@@ -115,15 +116,46 @@ func (c *Chain) Pipe(ctx context.Context, cmd []string, in io.Reader, out io.Wri
 	return c.Exec(ctx, cmd, Stdio{In: in, Out: out})
 }
 
-// Shell delegates to the outermost layer. For ssh+docker, that means
-// `ssh -t user@host -- /bin/bash` — the user lands on the remote
-// machine's shell, not inside the container. If you want to land
-// inside the container, build a single-handler alias for docker.
+// Shell drops the user into an interactive shell at the INNERMOST
+// layer of the chain — for ssh→docker that means inside the docker
+// container, not on the ssh host. This is what users almost always
+// want from `dconsole sh` (drush lives in the container, not on the
+// box hosting docker).
 //
-// (Alternative: walk the chain rebuilding argv for `bash` — but the
-// outermost shell is almost always what users want from `dconsole sh`.)
+// Composition: each layer that implements ShellWrapper provides a
+// TTY-aware wrap (ssh adds -t, compose drops -T, docker/kubectl add
+// -it, etc.). Layers that don't implement it fall back to Wrap —
+// which works but may not get a TTY through, so the inner shell can
+// exit immediately. In practice every TTY-relevant in-tree handler
+// implements ShellWrapper.
+//
+// The innermost layer's "open a shell" command is `["bash", "-l"]`
+// by default. workDir is dropped here — the outer layers can't know
+// what the inner container considers a valid path. If you need cwd
+// control, pass it via `dconsole sh @alias <path>` and the innermost
+// layer's ShellWrapper can interpret it. (Innermost ShellWrapper
+// implementations may add their own `cd workDir &&` prefix.)
 func (c *Chain) Shell(ctx context.Context, workDir string) error {
-	return c.Outer().Shell(ctx, workDir)
+	// Start with a plain login-shell command and wrap from inside out.
+	// Each layer's ShellWrapper is preferred over Wrap because Wrap
+	// is built for command-forwarding (no TTY); WrapShell is for
+	// interactive shells.
+	cur := []string{"bash", "-l"}
+	for i := len(c.layers) - 1; i >= 0; i-- {
+		if sw, ok := c.layers[i].(ShellWrapper); ok {
+			cur = sw.WrapShell(cur)
+		} else {
+			cur = c.layers[i].Wrap(cur)
+		}
+	}
+	if len(cur) == 0 {
+		return fmt.Errorf("chain produced empty argv for shell")
+	}
+	cmd := exec.CommandContext(ctx, cur[0], cur[1:]...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // Inner returns the innermost concrete handler — useful for capability

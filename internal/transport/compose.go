@@ -74,6 +74,22 @@ func (c *composeTransport) Preview(remoteCmd []string) []string {
 // pkg/handler.Handler.
 func (c *composeTransport) Wrap(inner []string) []string { return c.Preview(inner) }
 
+// WrapShell is the TTY-aware sibling of Wrap. Wrap adds `-T` (no
+// pseudo-tty) which is right for non-interactive command forwarding
+// but wrong for an interactive shell. WrapShell drops -T so docker
+// allocates a tty inside the container. Used by Chain.Shell.
+func (c *composeTransport) WrapShell(inner []string) []string {
+	args := []string{"docker", "compose"}
+	if c.cfg.ProjectDir != "" {
+		args = append(args, "--project-directory", c.cfg.ProjectDir)
+	}
+	args = append(args, "exec")
+	args = append(args, c.cfg.ExecOptions...)
+	args = append(args, c.cfg.Service)
+	args = append(args, inner...)
+	return args
+}
+
 func (c *composeTransport) Shell(ctx context.Context, workDir string) error {
 	args := []string{"compose"}
 	if c.cfg.ProjectDir != "" {
