@@ -28,6 +28,9 @@ func init() {
 			if w.Docker.Container == "" {
 				return nil, fmt.Errorf("docker transport requires a container name")
 			}
+			if w.Docker.Host != "" && w.Docker.Context != "" {
+				return nil, fmt.Errorf("docker transport: `host:` and `context:` are mutually exclusive")
+			}
 			cfg := w.Docker
 			return &dockerTransport{cfg: &cfg}, nil
 		},
@@ -53,8 +56,22 @@ func (d *dockerTransport) Pipe(ctx context.Context, remoteCmd []string, in io.Re
 	return cmd.Run()
 }
 
+// daemonFlags returns the `docker` global flags that pin every
+// invocation to the right daemon: `-H ssh://…`, `--context name`, or
+// nothing for the local daemon. Sits BEFORE the subcommand (exec,
+// ps, compose, …) because docker requires global flags up front.
+func (d *dockerTransport) daemonFlags() []string {
+	switch {
+	case d.cfg.Host != "":
+		return []string{"-H", d.cfg.Host}
+	case d.cfg.Context != "":
+		return []string{"--context", d.cfg.Context}
+	}
+	return nil
+}
+
 func (d *dockerTransport) argv(remoteCmd []string) []string {
-	args := []string{"exec", "-i"}
+	args := append(d.daemonFlags(), "exec", "-i")
 	if d.cfg.User != "" {
 		args = append(args, "--user", d.cfg.User)
 	}
@@ -73,10 +90,11 @@ func (d *dockerTransport) Preview(remoteCmd []string) []string {
 func (d *dockerTransport) Wrap(inner []string) []string { return d.Preview(inner) }
 
 // ShellPreview returns the argv dockerTransport.Shell() would spawn —
-// `docker exec -it [--user u] [-w workDir] <container> sh -c 'exec
-// "${SHELL:-/bin/sh}"'`.
+// `docker [-H host | --context name] exec -it [--user u] [-w workDir]
+// <container> sh -c 'exec "${SHELL:-/bin/sh}"'`.
 func (d *dockerTransport) ShellPreview(workDir string) []string {
-	args := []string{"docker", "exec", "-it"}
+	args := append([]string{"docker"}, d.daemonFlags()...)
+	args = append(args, "exec", "-it")
 	if d.cfg.User != "" {
 		args = append(args, "--user", d.cfg.User)
 	}
@@ -89,7 +107,7 @@ func (d *dockerTransport) ShellPreview(workDir string) []string {
 }
 
 func (d *dockerTransport) Shell(ctx context.Context, workDir string) error {
-	args := []string{"exec", "-it"}
+	args := append(d.daemonFlags(), "exec", "-it")
 	if d.cfg.User != "" {
 		args = append(args, "--user", d.cfg.User)
 	}

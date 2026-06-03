@@ -28,6 +28,9 @@ func init() {
 			if w.Compose.Service == "" {
 				return nil, fmt.Errorf("compose transport requires service")
 			}
+			if w.Compose.Host != "" && w.Compose.Context != "" {
+				return nil, fmt.Errorf("compose transport: `host:` and `context:` are mutually exclusive")
+			}
 			cfg := w.Compose
 			return &composeTransport{cfg: &cfg}, nil
 		},
@@ -53,8 +56,21 @@ func (c *composeTransport) Pipe(ctx context.Context, remoteCmd []string, in io.R
 	return cmd.Run()
 }
 
+// daemonFlags returns the global `docker` flags that pin every
+// invocation to the right daemon: `-H ssh://…`, `--context name`, or
+// nothing for the local daemon. Live BEFORE the `compose` subcommand.
+func (c *composeTransport) daemonFlags() []string {
+	switch {
+	case c.cfg.Host != "":
+		return []string{"-H", c.cfg.Host}
+	case c.cfg.Context != "":
+		return []string{"--context", c.cfg.Context}
+	}
+	return nil
+}
+
 func (c *composeTransport) build(ctx context.Context, remoteCmd []string) *exec.Cmd {
-	args := []string{"compose"}
+	args := append(c.daemonFlags(), "compose")
 	if c.cfg.ProjectDir != "" {
 		args = append(args, "--project-directory", c.cfg.ProjectDir)
 	}
@@ -79,7 +95,8 @@ func (c *composeTransport) Wrap(inner []string) []string { return c.Preview(inne
 // but wrong for an interactive shell. WrapShell drops -T so docker
 // allocates a tty inside the container. Used by Chain.Shell.
 func (c *composeTransport) WrapShell(inner []string) []string {
-	args := []string{"docker", "compose"}
+	args := append([]string{"docker"}, c.daemonFlags()...)
+	args = append(args, "compose")
 	if c.cfg.ProjectDir != "" {
 		args = append(args, "--project-directory", c.cfg.ProjectDir)
 	}
@@ -91,10 +108,12 @@ func (c *composeTransport) WrapShell(inner []string) []string {
 }
 
 // ShellPreview returns the argv composeTransport.Shell() would spawn.
-// Matches its existing Shell() implementation exactly: `docker compose
-// ... exec [-w workDir] <service> sh -c 'exec "${SHELL:-/bin/sh}"'`.
+// Matches its existing Shell() implementation exactly: `docker
+// [-H host | --context name] compose ... exec [-w workDir] <service>
+// sh -c 'exec "${SHELL:-/bin/sh}"'`.
 func (c *composeTransport) ShellPreview(workDir string) []string {
-	args := []string{"docker", "compose"}
+	args := append([]string{"docker"}, c.daemonFlags()...)
+	args = append(args, "compose")
 	if c.cfg.ProjectDir != "" {
 		args = append(args, "--project-directory", c.cfg.ProjectDir)
 	}
@@ -108,7 +127,7 @@ func (c *composeTransport) ShellPreview(workDir string) []string {
 }
 
 func (c *composeTransport) Shell(ctx context.Context, workDir string) error {
-	args := []string{"compose"}
+	args := append(c.daemonFlags(), "compose")
 	if c.cfg.ProjectDir != "" {
 		args = append(args, "--project-directory", c.cfg.ProjectDir)
 	}

@@ -399,12 +399,29 @@ type DockerTransport struct {
 	Container   string   `yaml:"container"`
 	User        string   `yaml:"user,omitempty"`
 	ExecOptions []string `yaml:"exec_options,omitempty"`
+
+	// Host points the docker CLI at a remote daemon, e.g.
+	// "ssh://user@host" (most common; docker tunnels over ssh
+	// internally), "tcp://host:2376" with TLS, or
+	// "unix:///custom/socket". Maps to `docker -H <value>`.
+	// Mutually exclusive with Context.
+	Host string `yaml:"host,omitempty"`
+
+	// Context names a saved docker-context entry on the local machine
+	// (`docker context create`). Maps to `docker --context <name>`.
+	// Mutually exclusive with Host.
+	Context string `yaml:"context,omitempty"`
 }
 
 type ComposeTransport struct {
 	ProjectDir  string   `yaml:"project_dir"`
 	Service     string   `yaml:"service"`
 	ExecOptions []string `yaml:"exec_options,omitempty"`
+
+	// Host / Context — see DockerTransport for semantics. Compose
+	// inherits these via `docker [-H … | --context …] compose …`.
+	Host    string `yaml:"host,omitempty"`
+	Context string `yaml:"context,omitempty"`
 }
 
 type KubectlTransport struct {
