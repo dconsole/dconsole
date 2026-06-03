@@ -113,6 +113,14 @@ func run(ctx context.Context, args []string) error {
 
 	// dconsole-side built-ins. Everything else falls through to Forward.
 	switch rest[0] {
+	case "inspect", "debug", "explain":
+		// Both `dconsole inspect @hc.prod cr` and `dconsole @hc.prod inspect cr`
+		// should plan the same thing. The former hits the pre-alias switch
+		// up at line 91; this branch handles the latter by re-injecting the
+		// resolved alias back into the args slice and dispatching to the
+		// same Inspect entry point.
+		inspectArgs := append([]string{"@" + a.Site + "." + a.Env}, rest[1:]...)
+		return command.Inspect(ctx, loader, inspectArgs, os.Stdout)
 	case "dconsole:bin":
 		// Debug: print the resolved bin and transport for this alias.
 		return printResolution(os.Stdout, a)
