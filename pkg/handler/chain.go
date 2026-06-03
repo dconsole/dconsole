@@ -175,6 +175,34 @@ func Inner(h Handler) Handler {
 	return h
 }
 
+// ShellArgv returns the argv that `dconsole sh @alias` would spawn,
+// without actually running it. Inspect uses this to render the chain-
+// composed shell command in its plan section.
+//
+// Composition matches Chain.Shell exactly: walk innermost-first,
+// prefer ShellWrapper (TTY-aware) over plain Wrap. For single-handler
+// aliases this is a best-effort preview — the handler's actual
+// Shell() method may add workDir-cd or other niceties that this
+// helper doesn't.
+func ShellArgv(h Handler) []string {
+	const innerShell = "bash"
+	if c, ok := h.(*Chain); ok {
+		cur := []string{innerShell, "-l"}
+		for i := len(c.layers) - 1; i >= 0; i-- {
+			if sw, ok := c.layers[i].(ShellWrapper); ok {
+				cur = sw.WrapShell(cur)
+			} else {
+				cur = c.layers[i].Wrap(cur)
+			}
+		}
+		return cur
+	}
+	if sw, ok := h.(ShellWrapper); ok {
+		return sw.WrapShell([]string{innerShell, "-l"})
+	}
+	return h.Wrap([]string{innerShell, "-l"})
+}
+
 // joinChainNames produces "ssh→docker" for inspect/error output.
 func joinChainNames(names []string) string {
 	if len(names) == 0 {

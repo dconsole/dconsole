@@ -81,7 +81,27 @@ func Inspect(ctx context.Context, loader *alias.Loader, args []string, out io.Wr
 	fmt.Fprintln(out, "\n─── plan ──────────────────────────────────────────────")
 	switch rest[0] {
 	case "sh", "ssh":
-		fmt.Fprintf(out, "  open interactive shell on @%s.%s (workDir=%s)\n", a.Site, a.Env, firstNonEmpty(rest, 1, a.Root))
+		workDir := firstNonEmpty(rest, 1, a.Root)
+		fmt.Fprintf(out, "  open interactive shell on @%s.%s (workDir=%s)\n", a.Site, a.Env, workDir)
+		h, err := handler.For(a)
+		if err != nil {
+			fmt.Fprintf(out, "  ⚠ handler.For: %v\n", err)
+			return nil
+		}
+		if chain, isChain := h.(*handler.Chain); isChain {
+			argv := handler.ShellArgv(h)
+			fmt.Fprintf(out, "  chain:       %s\n", chain.Name())
+			fmt.Fprintf(out, "  would run:   %s\n", quoteJoin(argv))
+		} else {
+			// Single-handler aliases use the handler's own Shell()
+			// which may add workDir-cd and other niceties ShellArgv
+			// doesn't replicate. Print both: the best-effort argv
+			// (what a chain WOULD produce) plus a note that the
+			// single-handler path may differ.
+			argv := handler.ShellArgv(h)
+			fmt.Fprintf(out, "  handler:     %s\n", h.Name())
+			fmt.Fprintf(out, "  would run:   %s (approx — %s.Shell() may add cd %s)\n", quoteJoin(argv), h.Name(), workDir)
+		}
 		return nil
 	case "auth":
 		fmt.Fprintf(out, "  run auth flow for transport=%s", a.Transport.Type)
