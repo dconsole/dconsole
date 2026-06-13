@@ -28,12 +28,25 @@ type Endpoint struct {
 	PathSpec string       // "%files", "%root", "/abs/path", etc.
 }
 
-// ParseEndpoint turns "@site.env:%files" or "./local/path" into an
-// Endpoint. Returns an error if the syntax is malformed.
+// ParseEndpoint turns "@site.env:%files", "@<uri>%files", or
+// "./local/path" into an Endpoint. Returns an error if the syntax is
+// malformed.
 func ParseEndpoint(token string, loader *alias.Loader) (*Endpoint, error) {
 	if strings.HasPrefix(token, "@") {
-		// Split off the path spec after the first ':'. Aliases never
-		// contain ':' in their @site.env form.
+		// Form 0: inline URI. Pathspec is the trailing `%files` /
+		// `%private` / `%root` segment AFTER the URI body. The URI
+		// itself contains colons (for port, scheme://) so we can't
+		// just split on the first `:` like the @site.env form.
+		if alias.IsInlineURIRef(token) {
+			ref, spec := splitURIPathspec(token)
+			a, err := alias.ParseInline(ref)
+			if err != nil {
+				return nil, err
+			}
+			return &Endpoint{Alias: a, PathSpec: spec}, nil
+		}
+		// Form 1: @site.env. Split off the path spec after the first ':'.
+		// Aliases never contain ':' in their @site.env form.
 		colon := strings.IndexByte(token, ':')
 		var ref, spec string
 		if colon < 0 {
@@ -48,6 +61,16 @@ func ParseEndpoint(token string, loader *alias.Loader) (*Endpoint, error) {
 		return &Endpoint{Alias: a, PathSpec: spec}, nil
 	}
 	return &Endpoint{Local: token, PathSpec: token}, nil
+}
+
+// splitURIPathspec separates the trailing `%files`/`%private`/`%root`
+// (with optional /subpath) pathspec from an inline URI token. URIs
+// don't legitimately contain `%` so finding the first `%` is safe.
+func splitURIPathspec(token string) (uri, spec string) {
+	if i := strings.IndexByte(token, '%'); i >= 0 {
+		return token[:i], token[i:]
+	}
+	return token, ""
 }
 
 // RsyncOpts are the supported flags for `dconsole rsync`.

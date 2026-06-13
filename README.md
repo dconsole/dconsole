@@ -149,6 +149,35 @@ dconsole looks for `*.site.yml` files in (in priority order):
 Each file is a YAML map keyed by environment name. A reserved
 `_defaults` key is merged into every other entry in the same file.
 
+### Inline URI shorthand (v0.5.0+)
+
+For one-off invocations you don't have to write a YAML alias at all
+— `@<scheme>://…` works anywhere an `@site.env` reference does:
+
+```sh
+# Quick ssh + multisite URI
+dconsole @ssh://deploy@prod.example.com/var/www#https://example.com status
+
+# Local DDEV from any directory
+dconsole @ddev://hc cr
+
+# Remote docker compose stack via the v0.4.5 host: tunnelling
+dconsole @compose://gordon@hosting.example.com/home/gordon/docker/heydon?service=php cr
+
+# kubectl into a pod
+dconsole @kubectl://prod/drupal-pod?container=drupal status
+
+# Sync from URI to YAML alias
+dconsole sql:sync @ssh://deploy@prod/var/www @hc.local
+```
+
+Schemes: `ssh`, `ddev`, `compose`, `docker`, `kubectl` (alias `k8s`),
+`lando`, `ahoy`, plus any installed plugin handler that registers a
+URI parser. Multi-layer chains stay in YAML.
+
+Use `dconsole alias:dump @<URI>` to see the YAML equivalent — handy
+for debugging or copying into `dconsole.yml` as a permanent alias.
+
 ### Schema
 
 dconsole accepts two equivalent ways of declaring how to reach an

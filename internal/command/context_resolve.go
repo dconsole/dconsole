@@ -36,6 +36,17 @@ func ResolveContextual(loader *alias.Loader, args []string) (*Resolution, error)
 		return nil, fmt.Errorf("no arguments")
 	}
 
+	// Form 0: inline URI (@<scheme>://…). MUST be checked before
+	// ParseRef because a host like "epp.heydon.io" contains a dot
+	// and would otherwise be misclassified as "site.env".
+	if alias.IsInlineURIRef(args[0]) {
+		a, err := alias.ParseInline(args[0])
+		if err != nil {
+			return nil, fmt.Errorf("parse inline URI: %w", err)
+		}
+		return &Resolution{Alias: a, Rest: args[1:], Source: args[0]}, nil
+	}
+
 	// Form 1: @site.env. We try the local project manifest first so an
 	// unregistered local project resolves without `project:register`.
 	if site, env, ok := alias.ParseRef(args[0]); ok {

@@ -79,6 +79,11 @@ func run(ctx context.Context, args []string) error {
 		return runRsync(ctx, loader, args[1:])
 	case "alias:convert":
 		return runAliasConvert(args[1:])
+	case "alias:dump":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: dconsole alias:dump <@ref-or-uri>")
+		}
+		return command.AliasDump(loader, args[1], os.Stdout)
 	case "project:register":
 		return command.ProjectRegister(os.Stdout)
 	case "project:list":
@@ -547,6 +552,7 @@ dconsole — a transport-agnostic Drush/Drupal CLI client.
 Usage:
   dconsole @site.env <command> [args…]      # forward to remote drush/drupal
   dconsole @env <command>                   # short form: site inferred from local dconsole.yml
+  dconsole @<URI> <command>                 # inline alias — no dconsole.yml needed
   dconsole <command>                        # no alias: uses dconsole.yml default_env, else local cwd
   dconsole @site.env sh    (or ssh)         # interactive shell on the remote, no drush loaded
   dconsole @site.env auth                   # run provider/transport auth (e.g. iron login)
@@ -556,6 +562,7 @@ Usage:
   dconsole sql:sync @src.env @dst.env [--force]  # dump source DB, import into target (transport-agnostic)
   dconsole rsync @src.env:%files @dst.env:%files [--force]  # copy %files / %root / %private / abs paths
   dconsole alias:convert drush.site.yml > dconsole.site.yml  # port a Drush 13 alias file
+  dconsole alias:dump <@ref-or-uri>          # render the YAML equivalent (handy for inline URIs)
   dconsole project:init [--yes] [--force] [--dry-run]  # detect project sources and generate dconsole.yml
   dconsole project:register                 # register the dconsole.yml at-or-above cwd
   dconsole project:list                     # list registered projects
