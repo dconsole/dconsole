@@ -159,16 +159,16 @@ For one-off invocations you don't have to write a YAML alias at all
 dconsole @ssh://deploy@prod.example.com/var/www#https://example.com status
 
 # Local DDEV from any directory
-dconsole @ddev://hc cr
+dconsole @ddev://mysite cr
 
 # Remote docker compose stack via the v0.4.5 host: tunnelling
-dconsole @compose://gordon@hosting.example.com/home/gordon/docker/heydon?service=php cr
+dconsole @compose://deploy@host.example.com/srv/mysite/docker?service=php cr
 
 # kubectl into a pod
 dconsole @kubectl://prod/drupal-pod?container=drupal status
 
 # Sync from URI to YAML alias
-dconsole sql:sync @ssh://deploy@prod/var/www @hc.local
+dconsole sql:sync @ssh://deploy@prod.example.com/var/www @mysite.local
 ```
 
 Schemes: `ssh`, `ddev`, `compose`, `docker`, `kubectl` (alias `k8s`),
