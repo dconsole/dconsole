@@ -12,11 +12,11 @@ for over and over: pulling databases, syncing files, opening a one-time
 admin login, registering project directories so aliases auto-resolve.
 
 ```sh
-dconsole @prod.live status                                    # forward to drush, anywhere
-dconsole sql:sync @prod.live @dev.local                       # cached, transport-aware DB sync
-dconsole rsync @prod.live @dev.local --include-private        # files (sites/default/files, private/)
-dconsole login @dev.local                                     # drush uli + open in browser
-dconsole @prod.live --help                                    # merged drush + dconsole help
+dconsole @example.live status                                 # forward to drush, anywhere
+dconsole sql:sync @example.live @example.local                # cached, transport-aware DB sync
+dconsole rsync @example.live @example.local --include-private # files (sites/default/files, private/)
+dconsole login @example.local                                 # drush uli + open in browser
+dconsole @example.live --help                                 # merged drush + dconsole help
 ```
 
 ## Why
@@ -101,20 +101,20 @@ recommended over `@latest` for reproducible workflows.
    environment:
 
    ```yaml
-   # ./myproject.site.yml
+   # ./example.site.yml
    _defaults:
      bin: { kind: drush }
 
    local:
-     uri: https://myproject.ddev.site
+     uri: https://example.ddev.site
      root: /var/www/html
      transport:
        type: ddev
-       ddev: { project: myproject }
+       ddev: { project: example }
 
    prod:
-     uri: https://myproject.com
-     root: /var/www/myproject
+     uri: https://example.com
+     root: /var/www/example
      transport:
        type: ssh
        ssh:
@@ -131,10 +131,10 @@ recommended over `@latest` for reproducible workflows.
 3. Run anything:
 
    ```sh
-   dconsole @myproject.prod status
-   dconsole sql:sync @myproject.prod @myproject.local
-   dconsole rsync @myproject.prod @myproject.local --include-private
-   dconsole login @myproject.local
+   dconsole @example.prod status
+   dconsole sql:sync @example.prod @example.local
+   dconsole rsync @example.prod @example.local --include-private
+   dconsole login @example.local
    ```
 
 ## Alias files
@@ -155,20 +155,20 @@ For one-off invocations you don't have to write a YAML alias at all
 — `@<scheme>://…` works anywhere an `@site.env` reference does:
 
 ```sh
-# Quick ssh + multisite URI
-dconsole @ssh://deploy@prod.example.com/var/www#https://example.com status
+# Quick ssh + multisite URI (Drush-style placeholders: www-admin@server.domain.com)
+dconsole @ssh://www-admin@server.domain.com/var/www/drupal#http://example.com status
 
 # Local DDEV from any directory
-dconsole @ddev://mysite cr
+dconsole @ddev://example cr
 
 # Remote docker compose stack via the v0.4.5 host: tunnelling
-dconsole @compose://deploy@host.example.com/srv/mysite/docker?service=php cr
+dconsole @compose://www-admin@server.domain.com/srv/example/docker?service=php cr
 
 # kubectl into a pod
-dconsole @kubectl://prod/drupal-pod?container=drupal status
+dconsole @kubectl://live/drupal-pod?container=drupal status
 
 # Sync from URI to YAML alias
-dconsole sql:sync @ssh://deploy@prod.example.com/var/www @mysite.local
+dconsole sql:sync @ssh://www-admin@server.domain.com/var/www/drupal @example.local
 ```
 
 Schemes: `ssh`, `ddev`, `compose`, `docker`, `kubectl` (alias `k8s`),
