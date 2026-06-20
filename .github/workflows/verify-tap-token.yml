@@ -1,0 +1,41 @@
+name: verify HOMEBREW_TAP_GITHUB_TOKEN
+
+# One-shot manual workflow that exercises the HOMEBREW_TAP_GITHUB_TOKEN
+# secret WITHOUT publishing anything — useful after rotating the PAT
+# to confirm the new token has the right scope. Delete this workflow
+# file (or just leave it; it's manual-trigger only) once you're done.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Use the secret to read the homebrew-tap repo
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::HOMEBREW_TAP_GITHUB_TOKEN is unset"
+            exit 1
+          fi
+
+          # Read the repo — proves the token authenticates AND its
+          # scope reaches dconsole/homebrew-tap. Fine-grained PATs that
+          # were generated for a DIFFERENT repo will 404 here.
+          echo "Read test: GET /repos/dconsole/homebrew-tap"
+          gh api repos/dconsole/homebrew-tap \
+            --jq '.full_name + "  visibility=" + .visibility + "  default_branch=" + .default_branch'
+
+          # Read the Formula/ directory the release workflow writes to.
+          # If contents permission is missing we'd 403 here. Tests that
+          # the scope is actually "Contents" not just "Metadata".
+          echo ""
+          echo "Contents test: GET /repos/dconsole/homebrew-tap/contents/Formula"
+          gh api repos/dconsole/homebrew-tap/contents/Formula \
+            --jq '[.[].name] | "files: " + join(", ")'
+
+          echo ""
+          echo "✓ token reaches the tap repo with Contents scope — goreleaser will be able to push"
