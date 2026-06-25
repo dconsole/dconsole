@@ -51,7 +51,8 @@ func Probe(ctx context.Context, a *alias.Alias, p Prober) (*Resolved, error) {
 		}
 		candidates = append(candidates, &Resolved{Kind: kind, Path: p})
 	}
-	var errs []string
+	var tried []attempt
+	seen := map[string]bool{}
 	for _, c := range candidates {
 		out, err := p.Run(ctx, []string{c.Path, "--version"})
 		if err == nil && len(bytes.TrimSpace(out)) > 0 {
@@ -59,12 +60,60 @@ func Probe(ctx context.Context, a *alias.Alias, p Prober) (*Resolved, error) {
 			saveToDisk(key, c)
 			return c, nil
 		}
-		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", c.Path, err))
+		if seen[c.Path] {
+			continue
 		}
+		seen[c.Path] = true
+		tried = append(tried, attempt{c.Path, classifyProbeErr(c.Path, err)})
 	}
-	return nil, fmt.Errorf("bin.kind: auto could not find drupal or drush on @%s.%s: %v", a.Site, a.Env, errs)
+	return nil, formatProbeFailure(a, tried)
 }
+
+// classifyProbeErr collapses raw fork/exec errors into a short human
+// phrase. Auto-probe tries six-plus candidates and most fail with the
+// same "no such file or directory" — repeating that verbatim makes
+// the error a wall of noise. Unfamiliar errors (permission denied,
+// drush exits non-zero) get passed through so the diagnostic info
+// isn't lost.
+func classifyProbeErr(p string, err error) string {
+	if err == nil {
+		return "no output"
+	}
+	s := err.Error()
+	switch {
+	case strings.Contains(s, "no such file or directory"):
+		return "no such file"
+	case strings.Contains(s, "executable file not found in $PATH"):
+		return "not on $PATH"
+	case strings.Contains(s, "permission denied"):
+		return "permission denied"
+	default:
+		return s
+	}
+}
+
+// formatProbeFailure renders the probe failure as a multi-line message.
+// When the alias is the synthetic local default (@self.local — i.e.
+// the user ran dconsole from a directory with no project config), we
+// also append a short hint pointing at the three common fixes. Remote
+// aliases skip the hint because "cd into a Drupal directory" doesn't
+// apply.
+func formatProbeFailure(a *alias.Alias, tried []attempt) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "no Drupal CLI (drush or drupal) found for @%s.%s.\n\nTried:\n", a.Site, a.Env)
+	for _, t := range tried {
+		fmt.Fprintf(&b, "  %-44s (%s)\n", t.path, t.reason)
+	}
+	if a.Site == "self" && a.Env == "local" {
+		b.WriteString("\nFixes:\n")
+		b.WriteString("  - cd into a Drupal project (with vendor/bin/drush)\n")
+		b.WriteString("  - target a remote alias: dconsole @site.env <cmd>\n")
+		b.WriteString("  - install drush globally: composer global require drush/drush\n")
+	}
+	return errors.New(strings.TrimRight(b.String(), "\n"))
+}
+
+type attempt struct{ path, reason string }
 
 // Forget removes a cached probe result, forcing a re-probe.
 func Forget(a *alias.Alias) {

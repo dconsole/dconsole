@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dconsole/dconsole/internal/alias"
@@ -81,6 +82,66 @@ func TestProbeAllFail(t *testing.T) {
 	}}
 	if _, err := Probe(context.Background(), a, p); err == nil {
 		t.Error("expected error when no candidate succeeds")
+	}
+}
+
+// TestProbeFailMessageFormat — when probing fails, the error must be
+// the new multi-line format (one path per line, deduped, with a short
+// classification per attempt). Regression guard for the previous
+// bracketed-blob format that surfaced as a 20-line wall of fork/exec
+// noise on synthetic local aliases.
+func TestProbeFailMessageFormat(t *testing.T) {
+	withTempCache(t)
+	a := &alias.Alias{
+		Site: "x", Env: "dev", Root: "/var/www/html",
+		Bin: alias.RemoteBin{Kind: KindAuto},
+	}
+	p := &fakeProber{respond: func(cmd []string) ([]byte, error) {
+		return nil, errors.New("fork/exec " + cmd[0] + ": no such file or directory")
+	}}
+	_, err := Probe(context.Background(), a, p)
+	if err == nil {
+		t.Fatal("expected probe failure")
+	}
+	msg := err.Error()
+	// Header
+	if !strings.Contains(msg, "no Drupal CLI") {
+		t.Errorf("expected 'no Drupal CLI' header; got: %s", msg)
+	}
+	// Per-path lines collapse the raw fork/exec text to "no such file"
+	if !strings.Contains(msg, "no such file") {
+		t.Errorf("expected classified 'no such file'; got: %s", msg)
+	}
+	if strings.Contains(msg, "fork/exec") {
+		t.Errorf("classifier should hide raw 'fork/exec' string; got: %s", msg)
+	}
+	// Remote alias (Site=x.dev) should NOT get the local-only "cd into"
+	// hint — that's specific to @self.local
+	if strings.Contains(msg, "cd into a Drupal project") {
+		t.Errorf("remote alias must not receive @self.local hint; got: %s", msg)
+	}
+}
+
+// TestProbeFailLocalHint — the synthetic @self.local case (user ran
+// dconsole from a directory with no project) gets the "Fixes:" block
+// pointing at cd/remote/global-install.
+func TestProbeFailLocalHint(t *testing.T) {
+	withTempCache(t)
+	a := &alias.Alias{
+		Site: "self", Env: "local", Root: "/tmp",
+		Bin: alias.RemoteBin{Kind: KindAuto},
+	}
+	p := &fakeProber{respond: func(cmd []string) ([]byte, error) {
+		return nil, errors.New("no such file or directory")
+	}}
+	_, err := Probe(context.Background(), a, p)
+	if err == nil {
+		t.Fatal("expected probe failure")
+	}
+	for _, want := range []string{"Fixes:", "cd into a Drupal project", "@site.env", "composer global require drush/drush"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("local hint missing %q in: %s", want, err.Error())
+		}
 	}
 }
 
