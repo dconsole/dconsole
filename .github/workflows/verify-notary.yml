@@ -1,0 +1,101 @@
+name: verify Apple notary credentials
+
+# One-shot manual workflow that signs a trivial binary and submits it
+# to Apple's notary service using the same secrets the release pipeline
+# uses. Reports whichever response Apple sends — useful when the
+# release workflow fails with FORBIDDEN.REQUIRED_AGREEMENTS_MISSING
+# and you need to know whether it's the agreement, the team, the key,
+# or something else.
+#
+# Doesn't publish anything. Doesn't touch a release. Manual trigger
+# only. Safe to leave in the repo or delete after the secrets are
+# validated.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: macos-latest
+    steps:
+      - name: Decode the cert + API key from secrets
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          set -euo pipefail
+          for v in MACOS_SIGN_P12 MACOS_SIGN_PASSWORD MACOS_NOTARY_KEY; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::$v secret is unset"
+              exit 1
+            fi
+          done
+          echo "$MACOS_SIGN_P12" | base64 -d > /tmp/cert.p12
+          echo "$MACOS_NOTARY_KEY" | base64 -d > /tmp/AuthKey.p8
+          echo "decoded: cert $(stat -f %z /tmp/cert.p12) bytes, key $(stat -f %z /tmp/AuthKey.p8) bytes"
+
+      - name: Import cert into a temp keychain
+        env:
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN=/tmp/notary-probe.keychain-db
+          KEYCHAIN_PW=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+          security import /tmp/cert.p12 \
+            -k "$KEYCHAIN" \
+            -P "$MACOS_SIGN_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PW" "$KEYCHAIN"
+          # Put the temp keychain first in the search list so codesign
+          # picks the imported cert.
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | xargs)
+          echo "Imported identities visible to codesign:"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Build a trivial signed test binary
+        run: |
+          set -euo pipefail
+          printf '#!/bin/sh\necho ok\n' > /tmp/testbin
+          chmod +x /tmp/testbin
+          # Use whichever Developer ID Application identity got
+          # imported — should be exactly one.
+          IDENTITY=$(security find-identity -v -p codesigning /tmp/notary-probe.keychain-db \
+            | grep "Developer ID Application" \
+            | head -1 \
+            | awk -F'"' '{print $2}')
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::no Developer ID Application identity found in the imported keychain"
+            exit 1
+          fi
+          echo "Signing with: $IDENTITY"
+          codesign --sign "$IDENTITY" \
+            --keychain /tmp/notary-probe.keychain-db \
+            --options runtime --timestamp --force /tmp/testbin
+          codesign --verify --verbose /tmp/testbin
+
+      - name: Submit to Apple notary service
+        env:
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+        run: |
+          set -euo pipefail
+          ditto -c -k /tmp/testbin /tmp/testbin.zip
+          echo "Submitting /tmp/testbin.zip ($(stat -f %z /tmp/testbin.zip) bytes) to notarytool"
+          # --wait blocks until Apple finishes processing (~10-90s typically)
+          xcrun notarytool submit /tmp/testbin.zip \
+            --key /tmp/AuthKey.p8 \
+            --key-id "$MACOS_NOTARY_KEY_ID" \
+            --issuer "$MACOS_NOTARY_ISSUER_ID" \
+            --wait
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f /tmp/cert.p12 /tmp/AuthKey.p8 /tmp/testbin /tmp/testbin.zip
+          security delete-keychain /tmp/notary-probe.keychain-db || true
