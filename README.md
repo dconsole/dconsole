@@ -277,8 +277,8 @@ gets its own typed config block (in addition to `type:`).
 | `lando`   | `lando`                | `app_dir`, `service` |
 | `ahoy`    | `ahoy`                 | `dir`, `task` (defaults to the bin basename) |
 | `docker`  | `docker`               | `container`, `user`, `exec_options`, `host`, `context` |
-| `container` | `container` (Apple)  | `container`, `user`, `exec_options` (macOS 15+) |
-| `container-compose` | `container` (Apple) | `project_name` or `project_dir`, `service`, `user`, `exec_options` (macOS 15+; for projects managed by [container-compose](https://github.com/mcrich23/container-compose) — dconsole derives the container name as `<project>-<service>` and shells to `container exec`, since container-compose has no `exec` subcommand) |
+| `container` *(experimental)* | `container` (Apple)  | `container`, `user`, `exec_options` (macOS 15+; Apple's containerization stack is still pre-1.0 and its CLI shape is moving) |
+| `container-compose` *(experimental)* | `container` (Apple) | `project_name` or `project_dir`, `service`, `user`, `exec_options` (macOS 15+; for projects managed by [container-compose](https://github.com/mcrich23/container-compose) — dconsole derives the container name as `<project>-<service>` and shells to `container exec`, since container-compose has no `exec` subcommand) |
 | `compose` | `docker compose`       | `project_dir`, `service`, `exec_options`, `host`, `context` |
 | `kubectl` | `kubectl`              | `namespace`, `resource`, `container`, `kubeconfig` |
 | `<plugin>`| via `dconsole plugin install` | whatever the plugin declares |

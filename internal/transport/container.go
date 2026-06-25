@@ -40,6 +40,10 @@ func init() {
 		// `handler: { type: container }` alias still works the
 		// moment the CLI is on PATH.
 		HideWhenMissing: true,
+		// Apple's containerization stack is still pre-1.0 and its CLI
+		// shape is moving. Flag handler-list output so users know to
+		// expect churn.
+		Experimental: true,
 		Build: func(a *alias.Alias) (Transport, error) {
 			var w struct {
 				Container alias.ContainerTransport `yaml:"container"`

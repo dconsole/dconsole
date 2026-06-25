@@ -40,6 +40,10 @@ func init() {
 		// the runtime once the service is up.
 		RequiredCLI:     "container",
 		HideWhenMissing: true,
+		// container-compose is a third-party project tracking Apple's
+		// pre-1.0 containerization stack; both layers are moving
+		// targets. Flag list output so users see this isn't stable.
+		Experimental: true,
 		Build: func(a *alias.Alias) (Transport, error) {
 			var w struct {
 				ContainerCompose alias.ContainerComposeTransport `yaml:"container_compose"`

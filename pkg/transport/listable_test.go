@@ -78,3 +78,31 @@ func TestListableNames_AvailableHandlersAlwaysShown(t *testing.T) {
 		t.Error("test-empty-cli should be listed (no RequiredCLI → never hidden)")
 	}
 }
+
+// TestIsExperimental — the Experimental flag is reflected by
+// IsExperimental(name). Unknown names return false (not "missing").
+func TestIsExperimental(t *testing.T) {
+	Register("test-experimental", Registration{
+		Experimental: true,
+		Build:        func(*alias.Alias) (Transport, error) { return nil, errors.New("test") },
+	})
+	Register("test-stable", Registration{
+		Build: func(*alias.Alias) (Transport, error) { return nil, errors.New("test") },
+	})
+	t.Cleanup(func() {
+		registryMu.Lock()
+		delete(registry, "test-experimental")
+		delete(registry, "test-stable")
+		registryMu.Unlock()
+	})
+
+	if !IsExperimental("test-experimental") {
+		t.Error("test-experimental should report experimental")
+	}
+	if IsExperimental("test-stable") {
+		t.Error("test-stable should NOT report experimental")
+	}
+	if IsExperimental("nope-not-registered") {
+		t.Error("unknown name should return false, not panic")
+	}
+}

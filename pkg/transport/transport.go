@@ -82,6 +82,22 @@ type Registration struct {
 	Build           Factory
 	RequiredCLI     string
 	HideWhenMissing bool
+
+	// Experimental marks a handler as not-yet-stable. It still works
+	// normally — the only effect is that discovery output (transport:list,
+	// plugin list) appends "(experimental)" to the line so users know
+	// the API or behaviour may change in a future release. Set true for
+	// handlers that depend on upstream tools whose CLI is still moving
+	// (Apple's `container`, container-compose) or for our own integrations
+	// that haven't burned in yet.
+	Experimental bool
+}
+
+// IsExperimental reports whether the named handler is registered with
+// Experimental=true. Returns false for unknown names.
+func IsExperimental(name string) bool {
+	r, ok := Lookup(name)
+	return ok && r.Experimental
 }
 
 var (

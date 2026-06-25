@@ -66,9 +66,16 @@ func PluginList(out io.Writer) error {
 		detail := ""
 		if err != nil {
 			mark = "missing"
-			detail = " (" + err.Error() + ")"
+			detail = "(" + err.Error() + ")"
 		}
-		fmt.Fprintf(out, "  %-12s %-8s %s\n", n, mark, detail)
+		if transport.IsExperimental(n) {
+			if detail == "" {
+				detail = "(experimental)"
+			} else {
+				detail = "(experimental) " + detail
+			}
+		}
+		fmt.Fprintf(out, "  %-20s %-8s %s\n", n, mark, detail)
 	}
 
 	// Installed-plugin section. Always print the section header so the

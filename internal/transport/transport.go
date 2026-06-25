@@ -25,6 +25,7 @@ var (
 	For                  = pkgtransport.For
 	Names                = pkgtransport.Names
 	ListableNames        = pkgtransport.ListableNames
+	IsExperimental       = pkgtransport.IsExperimental
 	ProbeAvailable       = pkgtransport.ProbeAvailable
 	RequiredCLI          = pkgtransport.RequiredCLI
 	CLIAvailable         = pkgtransport.CLIAvailable
