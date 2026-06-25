@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/dconsole/dconsole/internal/pluginmgr"
@@ -47,25 +48,50 @@ func PluginRemove(name string, out io.Writer) error {
 	return nil
 }
 
-// PluginList prints installed plugins with their resolved metadata.
+// PluginList prints everything dconsole can handle on this machine:
+// the built-in handlers (compiled in) AND any subprocess plugins
+// installed under ~/.dconsole/plugins/. The built-in section
+// duplicates `dconsole transport:list` so users don't have to know
+// the distinction between "built-in handler" and "plugin" to see
+// the full inventory.
 func PluginList(out io.Writer) error {
-	names, err := pluginmgr.ListInstalled()
+	// Built-in section.
+	fmt.Fprintln(out, "Built-in handlers:")
+	names := transport.Names()
+	sort.Strings(names)
+	for _, n := range names {
+		err := transport.ProbeAvailable(n)
+		mark := "ok"
+		detail := ""
+		if err != nil {
+			mark = "missing"
+			detail = " (" + err.Error() + ")"
+		}
+		fmt.Fprintf(out, "  %-12s %-8s %s\n", n, mark, detail)
+	}
+
+	// Installed-plugin section. Always print the section header so the
+	// user knows the two categories exist; print a placeholder when
+	// nothing is installed.
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Installed plugins:")
+	installed, err := pluginmgr.ListInstalled()
 	if err != nil {
 		return err
 	}
-	if len(names) == 0 {
-		fmt.Fprintln(out, "no plugins installed (~/.dconsole/plugins/ is empty)")
+	if len(installed) == 0 {
+		fmt.Fprintln(out, "  (none — install via `dconsole plugin install <name>`)")
 		return nil
 	}
 	dir, _ := pluginmgr.PluginDir()
-	for _, n := range names {
+	for _, n := range installed {
 		bin := filepath.Join(dir, "dconsole-"+n)
 		info, err := transport.PluginInfo(bin)
 		if err != nil {
-			fmt.Fprintf(out, "  %s\t(plugin-info failed: %v)\n", n, err)
+			fmt.Fprintf(out, "  %-12s (plugin-info failed: %v)\n", n, err)
 			continue
 		}
-		fmt.Fprintf(out, "  %s\t%s\t%s\n", n, info.Version, info.Description)
+		fmt.Fprintf(out, "  %-12s %-8s %s\n", n, info.Version, info.Description)
 	}
 	return nil
 }
