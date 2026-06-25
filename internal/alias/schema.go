@@ -80,15 +80,16 @@ type Handler struct {
 	// Typed convenience fields for in-tree handlers (one of these is
 	// non-nil depending on Type). Plugin handlers ignore these and use
 	// Raw + Decode.
-	Exec      *ExecTransport      `yaml:"exec,omitempty"`
-	SSH       *SSHTransport       `yaml:"ssh,omitempty"`
-	Docker    *DockerTransport    `yaml:"docker,omitempty"`
-	Container *ContainerTransport `yaml:"container,omitempty"`
-	Compose   *ComposeTransport   `yaml:"compose,omitempty"`
-	Kubectl   *KubectlTransport   `yaml:"kubectl,omitempty"`
-	DDEV      *DDEVTransport      `yaml:"ddev,omitempty"`
-	Lando     *LandoTransport     `yaml:"lando,omitempty"`
-	Ahoy      *AhoyTransport      `yaml:"ahoy,omitempty"`
+	Exec             *ExecTransport             `yaml:"exec,omitempty"`
+	SSH              *SSHTransport              `yaml:"ssh,omitempty"`
+	Docker           *DockerTransport           `yaml:"docker,omitempty"`
+	Container        *ContainerTransport        `yaml:"container,omitempty"`
+	ContainerCompose *ContainerComposeTransport `yaml:"container_compose,omitempty"`
+	Compose          *ComposeTransport          `yaml:"compose,omitempty"`
+	Kubectl          *KubectlTransport          `yaml:"kubectl,omitempty"`
+	DDEV             *DDEVTransport             `yaml:"ddev,omitempty"`
+	Lando            *LandoTransport            `yaml:"lando,omitempty"`
+	Ahoy             *AhoyTransport             `yaml:"ahoy,omitempty"`
 
 	// Via is the next inner layer in a chain. The current layer wraps
 	// Via's argv output. Nil for single-handler aliases.
@@ -346,14 +347,15 @@ type RemoteBin struct {
 // Decode(&cfg). Raw is populated for every Transport, in-tree or not.
 type Transport struct {
 	Type      string              `yaml:"type"`
-	Exec      *ExecTransport      `yaml:"exec,omitempty"`
-	SSH       *SSHTransport       `yaml:"ssh,omitempty"`
-	Docker    *DockerTransport    `yaml:"docker,omitempty"`
-	Container *ContainerTransport `yaml:"container,omitempty"`
-	Compose   *ComposeTransport   `yaml:"compose,omitempty"`
-	Kubectl   *KubectlTransport   `yaml:"kubectl,omitempty"`
-	DDEV      *DDEVTransport      `yaml:"ddev,omitempty"`
-	Lando     *LandoTransport     `yaml:"lando,omitempty"`
+	Exec             *ExecTransport             `yaml:"exec,omitempty"`
+	SSH              *SSHTransport              `yaml:"ssh,omitempty"`
+	Docker           *DockerTransport           `yaml:"docker,omitempty"`
+	Container        *ContainerTransport        `yaml:"container,omitempty"`
+	ContainerCompose *ContainerComposeTransport `yaml:"container_compose,omitempty"`
+	Compose          *ComposeTransport          `yaml:"compose,omitempty"`
+	Kubectl          *KubectlTransport          `yaml:"kubectl,omitempty"`
+	DDEV             *DDEVTransport             `yaml:"ddev,omitempty"`
+	Lando            *LandoTransport            `yaml:"lando,omitempty"`
 
 	// Raw is the original YAML mapping node so plugin transports can
 	// decode their own config block via Decode(). Populated by
@@ -438,6 +440,36 @@ type ContainerTransport struct {
 	User string `yaml:"user,omitempty"`
 	// ExecOptions are extra flags inserted between `exec` and the
 	// container ID (e.g. ["--env", "FOO=bar"]).
+	ExecOptions []string `yaml:"exec_options,omitempty"`
+}
+
+// ContainerComposeTransport addresses a service in a project run
+// under container-compose (https://github.com/mcrich23/container-compose) —
+// a docker-compose-style orchestrator for Apple's `container` runtime.
+//
+// container-compose itself has no `exec` subcommand (its CLI is
+// build / up / down / version), so dconsole shells to Apple's
+// `container exec <containerName>` directly. The container name is
+// derived as "<project>-<service>" matching container-compose's
+// naming convention (Sources/Container-Compose/Commands/ComposeUp.swift).
+//
+// macOS-only.
+type ContainerComposeTransport struct {
+	// ProjectDir is the directory containing your compose file. Used
+	// as the fallback project name (basename) when ProjectName is
+	// empty — container-compose uses the directory name as the
+	// project name when compose.yml has no top-level `name:` field.
+	ProjectDir string `yaml:"project_dir,omitempty"`
+	// ProjectName overrides the auto-derived project name. Set this
+	// when your compose.yml has an explicit top-level `name:` field —
+	// dconsole has no way to read your compose file at resolve time,
+	// so the user has to mirror the override here.
+	ProjectName string `yaml:"project_name,omitempty"`
+	// Service is the compose service name (e.g. "php", "db", "web").
+	Service string `yaml:"service"`
+	// User sets the in-container user.
+	User string `yaml:"user,omitempty"`
+	// ExecOptions are extra flags for `container exec`.
 	ExecOptions []string `yaml:"exec_options,omitempty"`
 }
 

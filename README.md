@@ -170,14 +170,19 @@ dconsole @kubectl://live/drupal-pod?container=drupal status
 # Apple `container` (macOS 15+, native OCI runtime)
 dconsole @container://drupal-app?user=www-data cr
 
+# container-compose: address a service by name; container-compose's
+# naming convention (<project>-<service>) is computed for you.
+dconsole @container-compose://hc?service=php cr
+dconsole @container-compose:///Users/me/heydon?service=php&user=www-data cr
+
 # Sync from URI to YAML alias
 dconsole sql:sync @ssh://www-admin@server.domain.com/var/www/drupal @example.local
 ```
 
 Schemes: `ssh`, `ddev`, `compose`, `docker`, `container` (Apple's
-macOS-native runtime), `kubectl` (alias `k8s`), `lando`, `ahoy`,
-plus any installed plugin handler that registers a URI parser.
-Multi-layer chains stay in YAML.
+macOS-native runtime), `container-compose`, `kubectl` (alias `k8s`),
+`lando`, `ahoy`, plus any installed plugin handler that registers a
+URI parser. Multi-layer chains stay in YAML.
 
 Use `dconsole alias:dump @<URI>` to see the YAML equivalent — handy
 for debugging or copying into `dconsole.yml` as a permanent alias.
@@ -273,6 +278,7 @@ gets its own typed config block (in addition to `type:`).
 | `ahoy`    | `ahoy`                 | `dir`, `task` (defaults to the bin basename) |
 | `docker`  | `docker`               | `container`, `user`, `exec_options`, `host`, `context` |
 | `container` | `container` (Apple)  | `container`, `user`, `exec_options` (macOS 15+) |
+| `container-compose` | `container` (Apple) | `project_name` or `project_dir`, `service`, `user`, `exec_options` (macOS 15+; for projects managed by [container-compose](https://github.com/mcrich23/container-compose) — dconsole derives the container name as `<project>-<service>` and shells to `container exec`, since container-compose has no `exec` subcommand) |
 | `compose` | `docker compose`       | `project_dir`, `service`, `exec_options`, `host`, `context` |
 | `kubectl` | `kubectl`              | `namespace`, `resource`, `container`, `kubeconfig` |
 | `<plugin>`| via `dconsole plugin install` | whatever the plugin declares |

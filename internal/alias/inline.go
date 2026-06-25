@@ -101,7 +101,7 @@ func ParseInline(token string) (*Alias, error) {
 
 	parser, ok := inlineSchemes[u.Scheme]
 	if !ok {
-		return nil, fmt.Errorf("unknown URI scheme %q (known: ssh, ddev, compose, docker, container, kubectl/k8s, lando, ahoy, or a registered plugin)", u.Scheme)
+		return nil, fmt.Errorf("unknown URI scheme %q (known: ssh, ddev, compose, docker, container, container-compose, kubectl/k8s, lando, ahoy, or a registered plugin)", u.Scheme)
 	}
 
 	a, err := parser(u)
