@@ -167,13 +167,17 @@ dconsole @compose://www-admin@server.domain.com/srv/example/docker?service=php c
 # kubectl into a pod
 dconsole @kubectl://live/drupal-pod?container=drupal status
 
+# Apple `container` (macOS 15+, native OCI runtime)
+dconsole @container://drupal-app?user=www-data cr
+
 # Sync from URI to YAML alias
 dconsole sql:sync @ssh://www-admin@server.domain.com/var/www/drupal @example.local
 ```
 
-Schemes: `ssh`, `ddev`, `compose`, `docker`, `kubectl` (alias `k8s`),
-`lando`, `ahoy`, plus any installed plugin handler that registers a
-URI parser. Multi-layer chains stay in YAML.
+Schemes: `ssh`, `ddev`, `compose`, `docker`, `container` (Apple's
+macOS-native runtime), `kubectl` (alias `k8s`), `lando`, `ahoy`,
+plus any installed plugin handler that registers a URI parser.
+Multi-layer chains stay in YAML.
 
 Use `dconsole alias:dump @<URI>` to see the YAML equivalent — handy
 for debugging or copying into `dconsole.yml` as a permanent alias.
@@ -267,8 +271,9 @@ gets its own typed config block (in addition to `type:`).
 | `ddev`    | `ddev`                 | `project`, `service` (auto-detected from `.ddev/config.yaml` walking up from `root`) |
 | `lando`   | `lando`                | `app_dir`, `service` |
 | `ahoy`    | `ahoy`                 | `dir`, `task` (defaults to the bin basename) |
-| `docker`  | `docker`               | `container`, `user`, `exec_options` |
-| `compose` | `docker compose`       | `project_dir`, `service`, `exec_options` |
+| `docker`  | `docker`               | `container`, `user`, `exec_options`, `host`, `context` |
+| `container` | `container` (Apple)  | `container`, `user`, `exec_options` (macOS 15+) |
+| `compose` | `docker compose`       | `project_dir`, `service`, `exec_options`, `host`, `context` |
 | `kubectl` | `kubectl`              | `namespace`, `resource`, `container`, `kubeconfig` |
 | `<plugin>`| via `dconsole plugin install` | whatever the plugin declares |
 

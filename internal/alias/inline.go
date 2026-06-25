@@ -54,14 +54,15 @@ func IsInlineURIRef(token string) bool {
 type inlineParser func(u *url.URL) (*Alias, error)
 
 var inlineSchemes = map[string]inlineParser{
-	"ssh":     parseSSHURI,
-	"ddev":    parseDDEVURI,
-	"compose": parseComposeURI,
-	"docker":  parseDockerURI,
-	"kubectl": parseKubectlURI,
-	"k8s":     parseKubectlURI, // synonym
-	"lando":   parseLandoURI,
-	"ahoy":    parseAhoyURI,
+	"ssh":       parseSSHURI,
+	"ddev":      parseDDEVURI,
+	"compose":   parseComposeURI,
+	"docker":    parseDockerURI,
+	"container": parseContainerURI,
+	"kubectl":   parseKubectlURI,
+	"k8s":       parseKubectlURI, // synonym
+	"lando":     parseLandoURI,
+	"ahoy":      parseAhoyURI,
 }
 
 // RegisterInlineScheme lets plugin handlers register a URI parser for
@@ -97,7 +98,7 @@ func ParseInline(token string) (*Alias, error) {
 
 	parser, ok := inlineSchemes[u.Scheme]
 	if !ok {
-		return nil, fmt.Errorf("unknown URI scheme %q (known: ssh, ddev, compose, docker, kubectl/k8s, lando, ahoy, or a registered plugin)", u.Scheme)
+		return nil, fmt.Errorf("unknown URI scheme %q (known: ssh, ddev, compose, docker, container, kubectl/k8s, lando, ahoy, or a registered plugin)", u.Scheme)
 	}
 
 	a, err := parser(u)
@@ -245,6 +246,29 @@ func parseDockerURI(u *url.URL) (*Alias, error) {
 		Bin:     RemoteBin{Kind: "auto"},
 	}
 	return a, nil
+}
+
+// parseContainerURI handles Apple's `container` CLI. No host or
+// context — the Apple runtime is local-only.
+//
+//	@container://drupal-app
+//	@container://drupal-app?user=www-data
+func parseContainerURI(u *url.URL) (*Alias, error) {
+	q := u.Query()
+	container := strings.TrimPrefix(u.Path, "/")
+	if u.User == nil && container == "" {
+		container = u.Host
+	} else if u.User != nil {
+		return nil, errors.New("container URIs have no remote-host concept — drop the user@ prefix")
+	}
+	if container == "" {
+		return nil, errors.New("missing container name: @container://<container>")
+	}
+	cfg := ContainerTransport{Container: container, User: q.Get("user")}
+	return &Alias{
+		Handler: newHandler("container", map[string]any{"container": containerToYAML(cfg)}),
+		Bin:     RemoteBin{Kind: "auto"},
+	}, nil
 }
 
 func parseKubectlURI(u *url.URL) (*Alias, error) {
@@ -419,6 +443,20 @@ func composeToYAML(c ComposeTransport) map[string]any {
 	}
 	if c.Context != "" {
 		out["context"] = c.Context
+	}
+	if len(c.ExecOptions) > 0 {
+		out["exec_options"] = c.ExecOptions
+	}
+	return out
+}
+
+func containerToYAML(c ContainerTransport) map[string]any {
+	out := map[string]any{}
+	if c.Container != "" {
+		out["container"] = c.Container
+	}
+	if c.User != "" {
+		out["user"] = c.User
 	}
 	if len(c.ExecOptions) > 0 {
 		out["exec_options"] = c.ExecOptions

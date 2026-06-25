@@ -54,14 +54,15 @@ type Handler struct {
 	// Typed convenience fields for in-tree handlers (one of these is
 	// non-nil depending on Type). Plugin handlers ignore these and use
 	// Raw + Decode.
-	Exec    *ExecTransport    `yaml:"exec,omitempty"`
-	SSH     *SSHTransport     `yaml:"ssh,omitempty"`
-	Docker  *DockerTransport  `yaml:"docker,omitempty"`
-	Compose *ComposeTransport `yaml:"compose,omitempty"`
-	Kubectl *KubectlTransport `yaml:"kubectl,omitempty"`
-	DDEV    *DDEVTransport    `yaml:"ddev,omitempty"`
-	Lando   *LandoTransport   `yaml:"lando,omitempty"`
-	Ahoy    *AhoyTransport    `yaml:"ahoy,omitempty"`
+	Exec      *ExecTransport      `yaml:"exec,omitempty"`
+	SSH       *SSHTransport       `yaml:"ssh,omitempty"`
+	Docker    *DockerTransport    `yaml:"docker,omitempty"`
+	Container *ContainerTransport `yaml:"container,omitempty"`
+	Compose   *ComposeTransport   `yaml:"compose,omitempty"`
+	Kubectl   *KubectlTransport   `yaml:"kubectl,omitempty"`
+	DDEV      *DDEVTransport      `yaml:"ddev,omitempty"`
+	Lando     *LandoTransport     `yaml:"lando,omitempty"`
+	Ahoy      *AhoyTransport      `yaml:"ahoy,omitempty"`
 
 	// Via is the next inner layer in a chain. The current layer wraps
 	// Via's argv output. Nil for single-handler aliases.
@@ -149,15 +150,16 @@ func flattenVia(h Handler) []Handler {
 // largely a field-by-field move.
 func handlerFromTransport(t Transport) Handler {
 	return Handler{
-		Type:    t.Type,
-		Exec:    t.Exec,
-		SSH:     t.SSH,
-		Docker:  t.Docker,
-		Compose: t.Compose,
-		Kubectl: t.Kubectl,
-		DDEV:    t.DDEV,
-		Lando:   t.Lando,
-		Raw:     t.Raw,
+		Type:      t.Type,
+		Exec:      t.Exec,
+		SSH:       t.SSH,
+		Docker:    t.Docker,
+		Container: t.Container,
+		Compose:   t.Compose,
+		Kubectl:   t.Kubectl,
+		DDEV:      t.DDEV,
+		Lando:     t.Lando,
+		Raw:       t.Raw,
 	}
 }
 
@@ -314,14 +316,15 @@ type RemoteBin struct {
 // plugins access their raw YAML block via Raw and decode it with
 // Decode(&cfg). Raw is populated for every Transport, in-tree or not.
 type Transport struct {
-	Type    string            `yaml:"type"`
-	Exec    *ExecTransport    `yaml:"exec,omitempty"`
-	SSH     *SSHTransport     `yaml:"ssh,omitempty"`
-	Docker  *DockerTransport  `yaml:"docker,omitempty"`
-	Compose *ComposeTransport `yaml:"compose,omitempty"`
-	Kubectl *KubectlTransport `yaml:"kubectl,omitempty"`
-	DDEV    *DDEVTransport    `yaml:"ddev,omitempty"`
-	Lando   *LandoTransport   `yaml:"lando,omitempty"`
+	Type      string              `yaml:"type"`
+	Exec      *ExecTransport      `yaml:"exec,omitempty"`
+	SSH       *SSHTransport       `yaml:"ssh,omitempty"`
+	Docker    *DockerTransport    `yaml:"docker,omitempty"`
+	Container *ContainerTransport `yaml:"container,omitempty"`
+	Compose   *ComposeTransport   `yaml:"compose,omitempty"`
+	Kubectl   *KubectlTransport   `yaml:"kubectl,omitempty"`
+	DDEV      *DDEVTransport      `yaml:"ddev,omitempty"`
+	Lando     *LandoTransport     `yaml:"lando,omitempty"`
 
 	// Raw is the original YAML mapping node so plugin transports can
 	// decode their own config block via Decode(). Populated by
@@ -393,6 +396,20 @@ type SSHTransport struct {
 	// dconsole auto-prefixes "-o" to bare key=value tokens, so the
 	// shortcut form behaves the way most users expect.
 	Options []string `yaml:"options,omitempty"`
+}
+
+// ContainerTransport spawns commands via Apple's `container` CLI —
+// a lightweight OCI runtime that ships with macOS 15+ and mirrors
+// docker's command surface. No Host/Context fields: the Apple CLI
+// doesn't support remote daemons (yet); everything is local.
+type ContainerTransport struct {
+	// Container is the running container name or ID.
+	Container string `yaml:"container"`
+	// User sets the in-container user (e.g. "www-data" or "uid:gid").
+	User string `yaml:"user,omitempty"`
+	// ExecOptions are extra flags inserted between `exec` and the
+	// container ID (e.g. ["--env", "FOO=bar"]).
+	ExecOptions []string `yaml:"exec_options,omitempty"`
 }
 
 type DockerTransport struct {
