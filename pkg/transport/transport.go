@@ -67,9 +67,21 @@ type Factory func(a *alias.Alias) (Transport, error)
 // transport type. RequiredCLI is the binary on $PATH this transport
 // depends on (or "" for none) — declared at registration so dconsole
 // can answer "is the ssh transport usable?" without needing an alias.
+//
+// HideWhenMissing lets a transport opt out of the inventory listings
+// (`dconsole plugin list`, `dconsole transport:list`) when its
+// RequiredCLI isn't on PATH. For mainstream tools (ddev, lando, ssh)
+// the default of false is right — showing "ddev: missing" prompts
+// users to consider installing it. For niche / new tools that most
+// users won't have (Apple's `container`), setting this true hides
+// the "missing" noise and the handler simply doesn't appear at all
+// until the user installs the CLI. The handler is still registered
+// and still usable if an alias references it explicitly — the flag
+// only affects discovery output, not functionality.
 type Registration struct {
-	Build       Factory
-	RequiredCLI string
+	Build           Factory
+	RequiredCLI     string
+	HideWhenMissing bool
 }
 
 var (
@@ -197,4 +209,24 @@ func RequiredCLI(name string) (string, bool) {
 		return "", false
 	}
 	return r.RequiredCLI, true
+}
+
+// ListableNames returns registered transports filtered for discovery
+// output. Handlers with HideWhenMissing=true AND an unavailable
+// RequiredCLI are omitted; everything else is included sorted
+// alphabetically. Used by `dconsole plugin list` and
+// `dconsole transport:list`.
+func ListableNames() []string {
+	names := Names()
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		r, _ := Lookup(n)
+		if r.HideWhenMissing && r.RequiredCLI != "" {
+			if err := CLIAvailable(r.RequiredCLI); err != nil {
+				continue
+			}
+		}
+		out = append(out, n)
+	}
+	return out
 }

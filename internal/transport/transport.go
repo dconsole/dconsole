@@ -24,6 +24,7 @@ var (
 	Lookup               = pkgtransport.Lookup
 	For                  = pkgtransport.For
 	Names                = pkgtransport.Names
+	ListableNames        = pkgtransport.ListableNames
 	ProbeAvailable       = pkgtransport.ProbeAvailable
 	RequiredCLI          = pkgtransport.RequiredCLI
 	CLIAvailable         = pkgtransport.CLIAvailable

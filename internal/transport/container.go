@@ -33,6 +33,13 @@ type containerTransport struct {
 func init() {
 	Register("container", Registration{
 		RequiredCLI: "container",
+		// Apple's `container` is a new and niche tool — most users
+		// (even most Mac users) won't have it installed. Hide the
+		// handler from `plugin list` / `transport:list` when the CLI
+		// isn't present so we don't add noise. An explicit
+		// `handler: { type: container }` alias still works the
+		// moment the CLI is on PATH.
+		HideWhenMissing: true,
 		Build: func(a *alias.Alias) (Transport, error) {
 			var w struct {
 				Container alias.ContainerTransport `yaml:"container"`

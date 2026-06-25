@@ -55,9 +55,10 @@ func PluginRemove(name string, out io.Writer) error {
 // the distinction between "built-in handler" and "plugin" to see
 // the full inventory.
 func PluginList(out io.Writer) error {
-	// Built-in section.
+	// Built-in section. ListableNames drops handlers that opt out
+	// when their CLI isn't installed (Apple's `container` does this).
 	fmt.Fprintln(out, "Built-in handlers:")
-	names := transport.Names()
+	names := transport.ListableNames()
 	sort.Strings(names)
 	for _, n := range names {
 		err := transport.ProbeAvailable(n)
