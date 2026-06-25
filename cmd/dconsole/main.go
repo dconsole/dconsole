@@ -101,6 +101,21 @@ func run(ctx context.Context, args []string) error {
 		return runPlugin(args[1:], os.Stdout)
 	}
 
+	// Catch typos of dconsole-side verbs BEFORE falling through to drush
+	// forwarding. Without this, `dconsole transpost:list` resolves a local
+	// alias, hunts for drush in cwd, and fails with a 20-line
+	// "bin.kind: auto could not find drupal or drush" backtrace. Drush
+	// commands have colons too (cache:rebuild, pm:enable, …) so we only
+	// suggest when the typo is close to a known built-in; distant `*:*`
+	// strings still forward to drush as before.
+	//
+	// Skip when args[0] starts with `@` — that's an alias ref, not a verb.
+	if !strings.HasPrefix(args[0], "@") {
+		if hint := suggestVerb(args[0]); hint != "" {
+			return fmt.Errorf("unknown dconsole command %q; did you mean %q?", args[0], hint)
+		}
+	}
+
 	// Resolve the alias contextually: @site.env, @env (site from cwd),
 	// or no prefix at all (project default_env or local cwd).
 	res, err := command.ResolveContextual(loader, args)
