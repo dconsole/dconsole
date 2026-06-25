@@ -20,7 +20,13 @@ env:
 
 jobs:
   goreleaser:
-    runs-on: ubuntu-latest
+    # macos-latest because the goreleaser notarize block shells to
+    # `codesign` and `xcrun notarytool` — both macOS-only. Public
+    # repos get free unlimited macOS minutes so the runner upgrade
+    # has no billing cost. If the signing secrets aren't set the
+    # notarize block silently skips and the build is the same as it
+    # would be on ubuntu-latest.
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,3 +53,16 @@ jobs:
           # goreleaser can push the updated Formula/dconsole.rb cross-repo.
           # Default GITHUB_TOKEN can't write outside this repo.
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          # macOS Developer ID code-signing certificate (base64-encoded
+          # .p12) + its password. Used by the notarize: block in
+          # .goreleaser.yml to sign the darwin_all universal binary
+          # before notarization. Absent → notarize block auto-disables
+          # via isEnvSet and the build ships unsigned (same as before).
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          # App Store Connect API key for `xcrun notarytool submit`.
+          # Generated at appstoreconnect.apple.com → Users and Access
+          # → Integrations → Team Keys.
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}

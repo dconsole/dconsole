@@ -64,6 +64,43 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot"
 
+# macOS code-signing + notarization for the darwin_all universal
+# binary. Auto-enabled when MACOS_SIGN_P12 is set in the workflow's
+# environment — local snapshots (no secret) skip signing so the
+# `goreleaser release --snapshot --clean` developer flow keeps
+# working without an Apple Developer account.
+#
+# Required secrets (configure on the dconsole/dconsole repo):
+#   MACOS_SIGN_P12           — base64-encoded .p12 export of the
+#                              "Developer ID Application: …" certificate
+#   MACOS_SIGN_PASSWORD      — the password protecting the .p12
+#   MACOS_NOTARY_ISSUER_ID   — App Store Connect issuer UUID (from
+#                              appstoreconnect.apple.com → Users and
+#                              Access → Integrations → Team Keys)
+#   MACOS_NOTARY_KEY_ID      — 10-char key ID for the same API key
+#   MACOS_NOTARY_KEY         — base64-encoded .p8 private key
+#                              downloaded when the API key was created
+#
+# The notarize block signs with the Developer ID cert, submits the
+# binary to Apple's notary service, waits for the response, and
+# staples the resulting ticket — so the signed binary verifies
+# offline via `spctl --assess` even on machines that have never
+# talked to Apple.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      sign:
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+        timeout: 20m
+      ids:
+        - dconsole-universal
+
 # Push a Homebrew formula to dconsole/homebrew-tap on every (non-pre)
 # release. Users install with:
 #   brew tap dconsole/tap
