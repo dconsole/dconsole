@@ -1,6 +1,32 @@
 package alias
 
-import "gopkg.in/yaml.v3"
+import (
+	"sync"
+
+	"github.com/dconsole/dconsole/internal/dlog"
+	"gopkg.in/yaml.v3"
+)
+
+// legacyWarnOnce ensures the "your YAML uses the deprecated
+// transport: / provider: schema" warning fires at most once per
+// process — not per-alias. The first legacy alias to load gets
+// named; the user knows what to look for from there.
+var legacyWarnOnce sync.Once
+
+// warnLegacySchema emits a one-time deprecation warning for a legacy
+// alias. Only called from LegacyChain, where the schema shape is
+// known. Tests that build aliases in-memory bypass UnmarshalYAML AND
+// LegacyChain via direct pkg/transport.For — so they don't trigger
+// this; only YAML-loaded aliases do.
+func warnLegacySchema(a *Alias, fields string) {
+	legacyWarnOnce.Do(func() {
+		dlog.Warnf(
+			"@%s.%s uses the deprecated `%s:` schema — please migrate to `handler:` "+
+				"(run `dconsole alias:dump @%s.%s` to see the equivalent and copy it back into your dconsole.yml)",
+			a.Site, a.Env, fields, a.Site, a.Env,
+		)
+	})
+}
 
 // AliasFile is the top-level structure of an `*.site.yml` file.
 // Keys are environment names (dev, stage, prod, …). A reserved `_defaults`
@@ -118,13 +144,16 @@ func (a *Alias) LegacyChain() ([]Handler, error) {
 	case hasHandler:
 		return flattenVia(a.Handler), nil
 	case hasTransport && hasProvider:
+		warnLegacySchema(a, "transport+provider")
 		return []Handler{
 			handlerFromTransport(a.Transport),
 			handlerFromProvider(a.Provider),
 		}, nil
 	case hasTransport:
+		warnLegacySchema(a, "transport")
 		return []Handler{handlerFromTransport(a.Transport)}, nil
 	case hasProvider:
+		warnLegacySchema(a, "provider")
 		return []Handler{handlerFromProvider(a.Provider)}, nil
 	}
 	return nil, nil

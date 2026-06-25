@@ -90,6 +90,14 @@ func Debugf(format string, args ...any) {
 	emit(fmt.Sprintf("[debug] "+format, args...))
 }
 
+// Warnf prints a deprecation / soft-failure notice to stderr
+// regardless of verbose level. Use sparingly — the whole point is
+// that the user MUST see it. Today only the legacy schema migration
+// path uses it.
+func Warnf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "warning: "+format+"\n", args...)
+}
+
 // DrushFlags returns the verbosity flags to append to a drush
 // invocation. Empty when verbosity is Off.
 func DrushFlags() []string {

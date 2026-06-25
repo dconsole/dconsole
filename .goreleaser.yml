@@ -91,8 +91,12 @@ brews:
     commit_msg_template: "dconsole {{ .Tag }}"
     install: |
       bin.install "dconsole"
+      # dcons is the short-form binary alias. Symlinked rather than
+      # copied so a single binary update covers both names.
+      bin.install_symlink "dconsole" => "dcons"
     test: |
       assert_match "dconsole", shell_output("#{bin}/dconsole --version")
+      assert_match "dconsole", shell_output("#{bin}/dcons --version")
 
 changelog:
   use: github

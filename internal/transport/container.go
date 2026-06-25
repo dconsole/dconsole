@@ -1,3 +1,12 @@
+//go:build darwin
+
+// Apple's `container` CLI is macOS-only. Restricting the build to
+// darwin means linux/windows binaries don't register the handler at
+// all — `dconsole transport:list` doesn't show it, the inline URI
+// parser rejects `@container://…` with "unknown scheme", and the
+// YAML loader errors on `type: container` with a clear message.
+// If Apple ports the runtime elsewhere, drop this build tag.
+
 package transport
 
 import (
