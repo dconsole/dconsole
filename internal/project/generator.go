@@ -55,9 +55,9 @@ func Detect(start string) (*Detection, error) {
 			d.ProjectName = name
 		}
 		d.Envs["local"] = alias.Alias{
-			URI:       "https://" + name + ".ddev.site",
-			Bin:       alias.RemoteBin{Kind: "auto"},
-			Transport: alias.NewTransport("ddev", alias.DDEVTransport{Project: name}),
+			URI:     "https://" + name + ".ddev.site",
+			Bin:     alias.RemoteBin{Kind: "auto"},
+			Handler: alias.NewHandler("ddev", alias.DDEVTransport{Project: name}),
 		}
 		d.DefaultEnv = "local"
 	}

@@ -314,9 +314,35 @@ func parseAhoyURI(u *url.URL) (*Alias, error) {
 
 // === helpers =============================================================
 
-// newHandler wraps a typed config block into the Handler struct, mirroring
-// what NewTransport does for the legacy Transport field.
+// NewHandler constructs a Handler from a type name + nested config
+// struct, populating BOTH the typed pointer field AND Raw so the
+// result is identical to one produced by yaml.Unmarshal. The shape
+// mirrors NewTransport for the legacy Transport field — use this
+// when building synthetic aliases in-memory (local-cwd fallback,
+// internal rsync exec helper, generated dconsole.yml previews).
+//
+// cfg may be a typed struct (ExecTransport, SSHTransport, ...) or
+// nil for handlers like exec where the config is optional.
+//
+// Panics on programmer-error inputs because the only failure mode
+// is "you handed me an unmarshalable config" — a build-time mistake.
+func NewHandler(typ string, cfg any) Handler {
+	block := map[string]any{}
+	if cfg != nil {
+		block[typ] = cfg
+	}
+	return newHandlerFromMap(typ, block)
+}
+
+// newHandler is the existing inline-URI internal helper. Kept private
+// because it takes a pre-built YAML map rather than a typed struct;
+// inline.go's per-scheme parsers already have the map handy from
+// their xxxToYAML() helpers.
 func newHandler(typ string, block map[string]any) Handler {
+	return newHandlerFromMap(typ, block)
+}
+
+func newHandlerFromMap(typ string, block map[string]any) Handler {
 	doc := map[string]any{"type": typ}
 	for k, v := range block {
 		doc[k] = v

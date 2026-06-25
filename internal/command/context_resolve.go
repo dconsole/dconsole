@@ -185,13 +185,10 @@ func findProjectManifest() (*project.Manifest, error) {
 func localAlias() *alias.Alias {
 	cwd, _ := os.Getwd()
 	return &alias.Alias{
-		Site: "self",
-		Env:  "local",
-		Root: cwd,
-		Bin:  alias.RemoteBin{Kind: "auto", Path: filepath.Join(cwd, "vendor", "bin", "drush")},
-		Transport: alias.Transport{
-			Type: "exec",
-			Exec: &alias.ExecTransport{Dir: cwd},
-		},
+		Site:    "self",
+		Env:     "local",
+		Root:    cwd,
+		Bin:     alias.RemoteBin{Kind: "auto", Path: filepath.Join(cwd, "vendor", "bin", "drush")},
+		Handler: alias.NewHandler("exec", alias.ExecTransport{Dir: cwd}),
 	}
 }

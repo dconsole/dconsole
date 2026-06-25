@@ -97,7 +97,7 @@ func run(ctx context.Context, args []string) error {
 		return command.Inspect(ctx, loader, args[1:], os.Stdout)
 	case "project:init":
 		return command.ProjectInit(ctx, os.Stdout, os.Stdin, parseInitFlags(args[1:]))
-	case "plugin":
+	case "plugin", "plug":
 		return runPlugin(args[1:], os.Stdout)
 	}
 

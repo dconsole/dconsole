@@ -116,8 +116,8 @@ func TestResolveContextual_NoPrefix_NoProject_LocalAlias(t *testing.T) {
 	if res.Alias.Site != "self" || res.Alias.Env != "local" {
 		t.Errorf("expected synthetic @self.local; got @%s.%s", res.Alias.Site, res.Alias.Env)
 	}
-	if res.Alias.Transport.Type != "exec" {
-		t.Errorf("local alias should use exec transport; got %q", res.Alias.Transport.Type)
+	if res.Alias.Handler.Type != "exec" {
+		t.Errorf("local alias should use exec handler; got %q", res.Alias.Handler.Type)
 	}
 	if res.Alias.Root != dir {
 		t.Errorf("local alias root should be cwd; got %q", res.Alias.Root)
