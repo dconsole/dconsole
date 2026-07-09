@@ -224,6 +224,18 @@ func MergeDefaults(defaults, a Alias) Alias {
 	if a.Bin.Path == "" {
 		a.Bin.Path = defaults.Bin.Path
 	}
+	// The new Handler/Handlers schema inherits from defaults the same
+	// way the legacy Transport did — but only when the env leaves BOTH
+	// forms empty. If the env explicitly chose one shape, we don't
+	// smuggle the other in from defaults (would surface later as a
+	// "mixes handler: and handlers:" error from LegacyChain).
+	if a.Handler.Type == "" && len(a.Handlers) == 0 {
+		if defaults.Handler.Type != "" {
+			a.Handler = defaults.Handler
+		} else if len(defaults.Handlers) > 0 {
+			a.Handlers = defaults.Handlers
+		}
+	}
 	if a.Transport.Type == "" {
 		a.Transport = defaults.Transport
 	}

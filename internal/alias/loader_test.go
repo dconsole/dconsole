@@ -91,6 +91,86 @@ stage:
 	}
 }
 
+// TestMergeDefaults_HandlerInherits — the new handler: schema inherits
+// from _defaults the same way legacy transport: does. Regression guard
+// for the pre-v0.5.12 gap where _defaults.handler was silently dropped,
+// which caused CI-only failures (local dev was masked by an override
+// file that gave each env its own handler).
+func TestMergeDefaults_HandlerInherits(t *testing.T) {
+	defaults := Alias{
+		Root: "/var/www/html",
+		Handler: Handler{
+			Type: "ssh",
+			SSH:  &SSHTransport{Host: "default.example.com", User: "deploy"},
+		},
+	}
+	envEmpty := Alias{}
+	merged := MergeDefaults(defaults, envEmpty)
+	if merged.Handler.Type != "ssh" {
+		t.Fatalf("empty env should inherit defaults.Handler; got %+v", merged.Handler)
+	}
+	if merged.Handler.SSH == nil || merged.Handler.SSH.Host != "default.example.com" {
+		t.Errorf("SSH block not inherited: %+v", merged.Handler.SSH)
+	}
+	if merged.Root != "/var/www/html" {
+		t.Errorf("Root not inherited: %q", merged.Root)
+	}
+}
+
+// TestMergeDefaults_HandlerExplicitWins — an env that declares its own
+// handler must not be overwritten by defaults.
+func TestMergeDefaults_HandlerExplicitWins(t *testing.T) {
+	defaults := Alias{
+		Handler: Handler{Type: "ssh", SSH: &SSHTransport{Host: "default.example.com", User: "deploy"}},
+	}
+	env := Alias{
+		Handler: Handler{Type: "ssh", SSH: &SSHTransport{Host: "prod.example.com", User: "root"}},
+	}
+	merged := MergeDefaults(defaults, env)
+	if merged.Handler.SSH.Host != "prod.example.com" || merged.Handler.SSH.User != "root" {
+		t.Errorf("env-declared handler must win over defaults; got %+v", merged.Handler.SSH)
+	}
+}
+
+// TestMergeDefaults_HandlersListInherits — the explicit-list form
+// (handlers: [...]) inherits the same way handler: does.
+func TestMergeDefaults_HandlersListInherits(t *testing.T) {
+	defaults := Alias{
+		Handlers: []Handler{
+			{Type: "ssh", SSH: &SSHTransport{Host: "jump.example.com", User: "deploy"}},
+			{Type: "docker", Docker: &DockerTransport{Container: "app"}},
+		},
+	}
+	env := Alias{}
+	merged := MergeDefaults(defaults, env)
+	if len(merged.Handlers) != 2 {
+		t.Fatalf("empty env should inherit defaults.Handlers; got len=%d", len(merged.Handlers))
+	}
+	if merged.Handlers[0].SSH.Host != "jump.example.com" {
+		t.Errorf("first handler wrong: %+v", merged.Handlers[0])
+	}
+}
+
+// TestMergeDefaults_HandlerDoesNotMixSchemas — if the env explicitly
+// chose handlers: (list form), defaults' handler: (single form) must
+// NOT be smuggled in — that would produce a "mixes handler: and
+// handlers:" error at LegacyChain time.
+func TestMergeDefaults_HandlerDoesNotMixSchemas(t *testing.T) {
+	defaults := Alias{
+		Handler: Handler{Type: "ssh", SSH: &SSHTransport{Host: "default.example.com"}},
+	}
+	env := Alias{
+		Handlers: []Handler{{Type: "exec"}},
+	}
+	merged := MergeDefaults(defaults, env)
+	if merged.Handler.Type != "" {
+		t.Errorf("env used handlers: — defaults.Handler must not be added on top; got Handler=%+v", merged.Handler)
+	}
+	if _, err := (&merged).LegacyChain(); err != nil {
+		t.Errorf("LegacyChain must not error after merge; got: %v", err)
+	}
+}
+
 func TestResolveBogusEnv(t *testing.T) {
 	dir := t.TempDir()
 	yaml := "dev:\n  uri: https://dev.example.com\n"
