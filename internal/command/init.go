@@ -34,7 +34,7 @@ func ProjectInit(ctx context.Context, out io.Writer, in *os.File, opts InitOpts)
 		fmt.Fprintln(out, "no project sources detected (looked for composer.json with drupal/core, .ddev/config.yaml, drush/sites/*.site.yml in cwd and its parents)")
 		return nil
 	}
-	target := filepath.Join(d.Root, "dconsole.yml")
+	target := existingManifestOr(d.Root, project.ManifestName)
 
 	fmt.Fprintln(out, "─── detection ─────────────────────────────────────────")
 	project.PrintDetection(d, out)
@@ -50,7 +50,7 @@ func ProjectInit(ctx context.Context, out io.Writer, in *os.File, opts InitOpts)
 	}
 
 	if !opts.YesAll && isInteractive(in) {
-		fmt.Fprintf(out, "\nwrite this dconsole.yml? [Y/n] ")
+		fmt.Fprintf(out, "\nwrite %s? [Y/n] ", filepath.Base(target))
 		ans, err := readLine(in)
 		if err != nil {
 			return err
@@ -101,6 +101,21 @@ func isInteractive(in *os.File) bool {
 	return (info.Mode() & os.ModeCharDevice) != 0
 }
 
+// existingManifestOr returns the path of an existing manifest at root
+// (either .dconsole.yml or the legacy dconsole.yml — dotfile wins
+// when both exist). If neither exists, returns filepath.Join(root, fallback).
+// Used by init flows so overwriting a legacy dconsole.yml keeps that
+// filename instead of orphaning it beside a new .dconsole.yml.
+func existingManifestOr(root, fallback string) string {
+	for _, n := range project.ManifestNames {
+		p := filepath.Join(root, n)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return filepath.Join(root, fallback)
+}
+
 // OfferGenerateIfMissing runs the project detector and, if it finds
 // sources, either asks the user whether to write dconsole.yml
 // (interactive) or skips with a one-line hint (non-interactive). Returns
@@ -125,19 +140,19 @@ func OfferGenerateIfMissing(in, out *os.File) (string, error) {
 	if err != nil || d == nil {
 		return "", err
 	}
-	target := filepath.Join(d.Root, "dconsole.yml")
+	target := existingManifestOr(d.Root, project.ManifestName)
 	if _, err := os.Stat(target); err == nil {
 		return target, nil
 	}
 	autoYes := os.Getenv("DCONSOLE_AUTOYES") != ""
 
 	if !autoYes && !isInteractive(in) {
-		fmt.Fprintf(out, "hint: no dconsole.yml at %s — `dconsole project:init` can generate one (detected %d env(s)); set DCONSOLE_AUTOYES=1 to auto-generate\n", d.Root, len(d.Envs))
+		fmt.Fprintf(out, "hint: no %s at %s — `dconsole project:init` can generate one (detected %d env(s)); set DCONSOLE_AUTOYES=1 to auto-generate\n", filepath.Base(target), d.Root, len(d.Envs))
 		return "", nil
 	}
 
 	if !autoYes {
-		fmt.Fprintln(out, "─── no dconsole.yml here ──────────────────────────────")
+		fmt.Fprintf(out, "─── no %s here ──────────────────────────────\n", filepath.Base(target))
 		project.PrintDetection(d, out)
 		fmt.Fprintf(out, "\ngenerate %s now? [Y/n] ", target)
 		ans, err := readLine(in)

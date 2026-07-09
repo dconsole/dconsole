@@ -66,7 +66,7 @@ func ProjectRegister(out io.Writer) error {
 		return err
 	}
 	if path == "" {
-		return fmt.Errorf("no dconsole.yml found in %s or any parent — create one and try again", cwd)
+		return fmt.Errorf("no .dconsole.yml found in %s or any parent (legacy dconsole.yml also accepted) — create one and try again", cwd)
 	}
 	m, err := project.LoadManifest(path)
 	if err != nil {

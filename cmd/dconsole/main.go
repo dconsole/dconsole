@@ -566,9 +566,9 @@ dconsole — a transport-agnostic Drush/Drupal CLI client.
 
 Usage:
   dconsole @site.env <command> [args…]      # forward to remote drush/drupal
-  dconsole @env <command>                   # short form: site inferred from local dconsole.yml
-  dconsole @<URI> <command>                 # inline alias — no dconsole.yml needed
-  dconsole <command>                        # no alias: uses dconsole.yml default_env, else local cwd
+  dconsole @env <command>                   # short form: site inferred from local .dconsole.yml
+  dconsole @<URI> <command>                 # inline alias — no .dconsole.yml needed
+  dconsole <command>                        # no alias: uses .dconsole.yml default_env, else local cwd
   dconsole @site.env sh    (or ssh)         # interactive shell on the remote, no drush loaded
   dconsole @site.env auth                   # run provider/transport auth (e.g. iron login)
   dconsole @site.env login [drush uli args] # drush user:login → open one-time URL in your browser
@@ -578,8 +578,8 @@ Usage:
   dconsole rsync @src.env:%files @dst.env:%files [--force]  # copy %files / %root / %private / abs paths
   dconsole alias:convert drush.site.yml > dconsole.site.yml  # port a Drush 13 alias file
   dconsole alias:dump <@ref-or-uri>          # render the YAML equivalent (handy for inline URIs)
-  dconsole project:init [--yes] [--force] [--dry-run]  # detect project sources and generate dconsole.yml
-  dconsole project:register                 # register the dconsole.yml at-or-above cwd
+  dconsole project:init [--yes] [--force] [--dry-run]  # detect project sources and generate .dconsole.yml
+  dconsole project:register                 # register the .dconsole.yml (or legacy dconsole.yml) at-or-above cwd
   dconsole project:list                     # list registered projects
   dconsole project:forget <name>            # remove a project from the registry
   dconsole plugin install <name>            # install a transport/provider plugin (or --path=tgz, --url=… --sha256=…)
@@ -604,8 +604,14 @@ Aliases come from (in priority order):
   ~/.dconsole/sites/*.site.yml
   ~/.dconsole/projects.yml  (auto-managed via project:register)
 
+Manifest filenames:
+  Primary   .dconsole.yml            .dconsole.override.yml (per-machine)
+  Legacy    dconsole.yml             dconsole.override.yml  (still accepted)
+  The dotfile form is the modern default and wins when both are present
+  in the same directory.
+
 Per-machine overrides:
-  When a dconsole.override.yml exists next to dconsole.yml, its fields
+  When a .dconsole.override.yml exists next to the manifest, its fields
   layer on top of the base manifest: default_env, _defaults, and each
   named env merge field-by-field with the override winning. Useful for
   deployments where the same project should resolve default_env to the

@@ -278,6 +278,78 @@ func TestFindManifest_WalksUp(t *testing.T) {
 	}
 }
 
+// TestFindManifest_PrefersDotfile — when both .dconsole.yml and
+// dconsole.yml exist in the same directory, the walker picks the
+// dotfile. Regression guard so future refactors of ManifestNames
+// keep the modern-default ordering.
+func TestFindManifest_PrefersDotfile(t *testing.T) {
+	root := t.TempDir()
+	dot := filepath.Join(root, ".dconsole.yml")
+	plain := filepath.Join(root, "dconsole.yml")
+	if err := os.WriteFile(dot, []byte("project: dot\ndev: { uri: y }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(plain, []byte("project: plain\ndev: { uri: y }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	found, err := FindManifest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found != dot {
+		t.Errorf("found %q, want dotfile %q", found, dot)
+	}
+}
+
+// TestFindManifest_LegacyOnly — when only the plain dconsole.yml
+// exists (no dotfile), the walker still finds it. Confirms the
+// backwards-compat path is unchanged.
+func TestFindManifest_LegacyOnly(t *testing.T) {
+	root := t.TempDir()
+	plain := filepath.Join(root, "dconsole.yml")
+	if err := os.WriteFile(plain, []byte("project: x\ndev: { uri: y }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	found, err := FindManifest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found != plain {
+		t.Errorf("found %q, want %q", found, plain)
+	}
+}
+
+// TestLoadManifest_OverrideDotfilePreferred — when both the dotfile
+// override (.dconsole.override.yml) and the legacy override exist
+// next to the manifest, the dotfile wins.
+func TestLoadManifest_OverrideDotfilePreferred(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, ".dconsole.yml")
+	if err := os.WriteFile(base, []byte("project: x\ndev: { uri: y }\nstage: { uri: y }\ndefault_env: dev\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Dotfile override → default_env: stage
+	dotOv := filepath.Join(dir, ".dconsole.override.yml")
+	if err := os.WriteFile(dotOv, []byte("default_env: stage\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Legacy override → default_env: dev (should be ignored)
+	plainOv := filepath.Join(dir, "dconsole.override.yml")
+	if err := os.WriteFile(plainOv, []byte("default_env: dev\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m, err := LoadManifest(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.DefaultEnv != "stage" {
+		t.Errorf("DefaultEnv = %q, want %q (dotfile override should win)", m.DefaultEnv, "stage")
+	}
+	if m.OverridePath != dotOv {
+		t.Errorf("OverridePath = %q, want dotfile override %q", m.OverridePath, dotOv)
+	}
+}
+
 func TestRegistryRoundtrip(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)

@@ -85,7 +85,7 @@ func ResolveContextual(loader *alias.Loader, args []string) (*Resolution, error)
 			}
 		}
 		if m == nil {
-			return nil, fmt.Errorf("@%s used without a site, but no dconsole.yml found in cwd or any parent — write `@<site>.%s` or run from a project root", env, env)
+			return nil, fmt.Errorf("@%s used without a site, but no .dconsole.yml (or legacy dconsole.yml) found in cwd or any parent — write `@<site>.%s` or run from a project root", env, env)
 		}
 		a, err := m.ResolveEnv(env)
 		if err == nil {
@@ -113,7 +113,7 @@ func ResolveContextual(loader *alias.Loader, args []string) (*Resolution, error)
 	}
 	if m != nil {
 		if m.DefaultEnv == "" {
-			return nil, fmt.Errorf("dconsole.yml at %s has no `default_env:` set; either add one or pass @env explicitly", m.AbsPath)
+			return nil, fmt.Errorf("manifest at %s has no `default_env:` set; either add one or pass @env explicitly", m.AbsPath)
 		}
 		a, err := m.ResolveEnv(m.DefaultEnv)
 		if err != nil {
@@ -129,7 +129,7 @@ func ResolveContextual(loader *alias.Loader, args []string) (*Resolution, error)
 			return nil, err
 		}
 		if m2.DefaultEnv == "" {
-			return nil, fmt.Errorf("generated dconsole.yml at %s has no default_env; edit it and re-run", written)
+			return nil, fmt.Errorf("generated manifest at %s has no default_env; edit it and re-run", written)
 		}
 		a, err := m2.ResolveEnv(m2.DefaultEnv)
 		if err != nil {

@@ -185,7 +185,7 @@ macOS-native runtime), `container-compose`, `kubectl` (alias `k8s`),
 URI parser. Multi-layer chains stay in YAML.
 
 Use `dconsole alias:dump @<URI>` to see the YAML equivalent — handy
-for debugging or copying into `dconsole.yml` as a permanent alias.
+for debugging or copying into `.dconsole.yml` as a permanent alias.
 
 ### Schema
 
@@ -290,7 +290,7 @@ installed subprocess plugins. List aliases with `dconsole site:alias`
 ### Override files
 
 Alongside any `*.site.yml`, dconsole loads a sibling `*.override.yml`
-and a project-wide `dconsole.override.yml` if present. Override layers
+and a project-wide `.dconsole.override.yml` (or legacy `dconsole.override.yml`) if present. Override layers
 deep-merge into the base — useful for keeping local-laptop tweaks
 (custom `identity_file`, alternate ports, container names) out of the
 shared yml.
@@ -314,7 +314,7 @@ dconsole assets:cache list | clear [@alias]
 # Aliases & projects
 dconsole site:alias | sa                # list all known aliases
 dconsole alias:convert <file>           # convert a drush 8 PHP alias file
-dconsole project:init                   # bootstrap dconsole.yml in cwd
+dconsole project:init                   # bootstrap .dconsole.yml in cwd
 dconsole project:register               # remember this dir for alias auto-resolution
 dconsole project:list                   # registered projects
 dconsole project:forget [path]          # unregister
@@ -532,14 +532,17 @@ transport path for everything else.
 ## Project bookkeeping
 
 ```sh
-dconsole project:init       # write a dconsole.yml in cwd (project metadata)
+dconsole project:init       # write a .dconsole.yml in cwd (project metadata)
 dconsole project:register   # remember this dir so @site.env resolves from anywhere inside it
 dconsole project:list
 dconsole project:forget     # unregister cwd (or pass a path)
 ```
 
-`dconsole.yml` is project metadata (plugin pins, default alias hints).
-`dconsole.override.yml` is the gitignored sibling for per-laptop tweaks.
+`.dconsole.yml` is project metadata (plugin pins, default alias hints).
+`.dconsole.override.yml` is the gitignored sibling for per-laptop tweaks.
+Both legacy `dconsole.yml` / `dconsole.override.yml` (no leading dot)
+are still accepted for backwards compat; when both forms exist in the
+same directory the dotfile wins.
 
 ## Caches
 

@@ -168,7 +168,7 @@ func inspectHelp(ctx context.Context, loader *alias.Loader, out io.Writer) error
 		return nil
 	}
 	if a == nil {
-		fmt.Fprintln(out, "  no project context (no dconsole.yml with default_env in cwd or any parent)")
+		fmt.Fprintln(out, "  no project context (no .dconsole.yml with default_env in cwd or any parent)")
 		fmt.Fprintln(out, "  → would fall back to dconsole-only usage")
 		return nil
 	}

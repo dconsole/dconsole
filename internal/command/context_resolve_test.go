@@ -63,7 +63,7 @@ func TestResolveContextual_ShortRef_NoProjectFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when @env used without a project")
 	}
-	if !strings.Contains(err.Error(), "no dconsole.yml") {
+	if !strings.Contains(err.Error(), ".dconsole.yml") {
 		t.Errorf("error should mention missing manifest; got %v", err)
 	}
 }

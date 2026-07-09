@@ -15,15 +15,40 @@ import (
 	"github.com/dconsole/dconsole/internal/alias"
 )
 
-// ManifestName is the filename dconsole looks for at a repo root.
-const ManifestName = "dconsole.yml"
+// ManifestNames are the filenames dconsole recognises for a project
+// manifest, in preference order. The dotfile form is the modern
+// default (matches conventions like .prettierrc, .eslintrc, .env);
+// the plain form is kept indefinitely for backwards compatibility.
+// When both are present in the same directory, the dotfile wins.
+var ManifestNames = []string{".dconsole.yml", "dconsole.yml"}
 
-// OverrideManifestName is the optional file that layers field-by-field
-// changes on top of the base manifest. Useful when dconsole is deployed
-// to a server or inside a container: a tiny override can change
-// default_env and switch one env's transport to `exec` without forking
-// the committed dconsole.yml.
-const OverrideManifestName = "dconsole.override.yml"
+// OverrideManifestNames are the optional file layered field-by-field
+// on top of the base manifest, in preference order. Same dot/plain
+// pairing as ManifestNames.
+var OverrideManifestNames = []string{".dconsole.override.yml", "dconsole.override.yml"}
+
+// ManifestName is the CURRENT primary manifest filename (the dotfile
+// form). Use this when writing a new manifest — for READING, prefer
+// resolveNames() / findExisting() which check every name.
+const ManifestName = ".dconsole.yml"
+
+// OverrideManifestName is the CURRENT primary override filename. Same
+// caveat as ManifestName: writers should use it, readers walk the list.
+const OverrideManifestName = ".dconsole.override.yml"
+
+// findExisting returns the first file from `names` that exists in
+// `dir`, or "" if none exist. Callers use this to prefer the new
+// dotfile form over the legacy plain form while still finding old
+// manifests unchanged.
+func findExisting(dir string, names []string) string {
+	for _, n := range names {
+		p := filepath.Join(dir, n)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
 
 // Manifest is the parsed dconsole.yml file. It declares a project name
 // and the envs that belong to it. The YAML format is flat: `project:`
@@ -45,17 +70,19 @@ type Manifest struct {
 	OverridePath string
 }
 
-// LoadManifest reads and parses a dconsole.yml at `path`. If a
-// dconsole.override.yml sits next to it, that file is layered on top
-// field-by-field — useful for per-machine / per-deployment config that
-// shouldn't be committed.
+// LoadManifest reads and parses a manifest at `path` (typically
+// .dconsole.yml, or the legacy dconsole.yml). If a matching override
+// file sits next to it (.dconsole.override.yml, or the legacy
+// dconsole.override.yml), that file is layered on top field-by-field —
+// useful for per-machine / per-deployment config that shouldn't be
+// committed. When both dot- and plain-forms of the override exist,
+// the dot-form wins.
 func LoadManifest(path string) (*Manifest, error) {
 	m, err := loadManifestFile(path, manifestLoadOpts{requireEnvs: true, inferProject: true})
 	if err != nil {
 		return nil, err
 	}
-	overridePath := filepath.Join(filepath.Dir(m.AbsPath), OverrideManifestName)
-	if _, statErr := os.Stat(overridePath); statErr == nil {
+	if overridePath := findExisting(filepath.Dir(m.AbsPath), OverrideManifestNames); overridePath != "" {
 		ov, err := loadManifestFile(overridePath, manifestLoadOpts{requireEnvs: false, inferProject: false})
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", overridePath, err)
@@ -167,17 +194,18 @@ func mergeOverride(base, ov *Manifest) {
 	}
 }
 
-// FindManifest walks up from `start` looking for a dconsole.yml. Returns
-// the path (or "" if none found). Stops at filesystem root.
+// FindManifest walks up from `start` looking for a manifest — either
+// .dconsole.yml (preferred) or the legacy dconsole.yml. When both
+// exist in the same directory, the dotfile wins. Returns the path
+// (or "" if none found). Stops at filesystem root.
 func FindManifest(start string) (string, error) {
 	dir, err := filepath.Abs(start)
 	if err != nil {
 		return "", err
 	}
 	for {
-		candidate := filepath.Join(dir, ManifestName)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate, nil
+		if found := findExisting(dir, ManifestNames); found != "" {
+			return found, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
