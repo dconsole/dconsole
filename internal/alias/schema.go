@@ -180,16 +180,17 @@ func flattenVia(h Handler) []Handler {
 // largely a field-by-field move.
 func handlerFromTransport(t Transport) Handler {
 	return Handler{
-		Type:      t.Type,
-		Exec:      t.Exec,
-		SSH:       t.SSH,
-		Docker:    t.Docker,
-		Container: t.Container,
-		Compose:   t.Compose,
-		Kubectl:   t.Kubectl,
-		DDEV:      t.DDEV,
-		Lando:     t.Lando,
-		Raw:       t.Raw,
+		Type:             t.Type,
+		Exec:             t.Exec,
+		SSH:              t.SSH,
+		Docker:           t.Docker,
+		Container:        t.Container,
+		ContainerCompose: t.ContainerCompose,
+		Compose:          t.Compose,
+		Kubectl:          t.Kubectl,
+		DDEV:             t.DDEV,
+		Lando:            t.Lando,
+		Raw:              t.Raw,
 	}
 }
 
