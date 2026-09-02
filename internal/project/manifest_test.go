@@ -350,36 +350,273 @@ func TestLoadManifest_OverrideDotfilePreferred(t *testing.T) {
 	}
 }
 
-func TestRegistryRoundtrip(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
-	// Reset cache since other tests may have populated it.
+// resetRegistryCache drops the module-level cache so a test that
+// changes HOME sees fresh disk state.
+func resetRegistryCache() {
 	registryMu.Lock()
 	cachedRegistry = nil
 	registryMu.Unlock()
+}
+
+func TestRegistryRoundtrip(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	resetRegistryCache()
+
+	// Manifest that Register() will point at. Register does an existence
+	// check on the pre-existing entry to detect conflicts, but the
+	// target itself just needs to be reachable via filepath.Abs.
+	target := filepath.Join(tmp, "demo", ".dconsole.yml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("project: demo\ndev: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	r, err := LoadRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Register("demo", filepath.Join(tmp, "demo", "dconsole.yml")); err != nil {
+	if err := r.Register("demo", target); err != nil {
 		t.Fatal(err)
 	}
-	// Drop the cache, reload from disk.
-	registryMu.Lock()
-	cachedRegistry = nil
-	registryMu.Unlock()
+
+	// The entry is a symlink at ~/.dconsole/projects/demo.yml → target.
+	entry := filepath.Join(tmp, ".dconsole", "projects", "demo.yml")
+	info, err := os.Lstat(entry)
+	if err != nil {
+		t.Fatalf("Register didn't create %s: %v", entry, err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("expected symlink at %s; got mode %v", entry, info.Mode())
+	}
+
+	// Drop the cache, reload from disk — Lookup should still find it.
+	resetRegistryCache()
 	r2, err := LoadRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := r2.Lookup("demo"); got == "" {
-		t.Errorf("demo not persisted; got %q", got)
+	if got := r2.Lookup("demo"); got != target {
+		t.Errorf("Lookup(demo) = %q, want %q", got, target)
 	}
+
 	if err := r2.Forget("demo"); err != nil {
 		t.Fatal(err)
 	}
 	if r2.Lookup("demo") != "" {
 		t.Error("forget didn't remove the entry")
+	}
+	if _, err := os.Lstat(entry); err == nil {
+		t.Errorf("Forget didn't remove %s", entry)
+	}
+}
+
+// TestRegistryDropInFile — a real regular file at
+// ~/.dconsole/projects/<name>.yml is treated as a standalone manifest
+// (no local checkout needed). The lookup returns the file's own path.
+// This is the "run drush without local Drupal source" workflow.
+func TestRegistryDropInFile(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	resetRegistryCache()
+
+	dir := filepath.Join(tmp, ".dconsole", "projects")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dropIn := filepath.Join(dir, "shared.yml")
+	if err := os.WriteFile(dropIn, []byte(
+		"project: shared\ndefault_env: prod\nprod:\n  handler: { type: ssh, ssh: { host: shared.example.com, user: deploy } }\n",
+	), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := LoadRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Lookup("shared"); got != dropIn {
+		t.Errorf("drop-in lookup: got %q, want %q (the file itself)", got, dropIn)
+	}
+	// End-to-end: LoadManifestByName should read it and find the ssh handler.
+	m, err := LoadManifestByName("shared", r.Lookup("shared"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := m.ResolveEnv("prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Handler.Type != "ssh" || a.Handler.SSH == nil || a.Handler.SSH.Host != "shared.example.com" {
+		t.Errorf("drop-in handler did not resolve: %+v", a.Handler)
+	}
+}
+
+// TestRegistryLegacyFileFallback — pre-v0.5.13 projects.yml entries
+// are still readable. Directory entries win on conflict.
+func TestRegistryLegacyFileFallback(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	resetRegistryCache()
+
+	// Legacy file only.
+	legacyPath := filepath.Join(tmp, ".dconsole", "projects.yml")
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyPath, []byte(
+		"projects:\n  oldproj: /nonexistent/old/dconsole.yml\n  clash: /nonexistent/legacy-wins.yml\n",
+	), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Directory entry that clashes with the legacy "clash" name.
+	regDir := filepath.Join(tmp, ".dconsole", "projects")
+	if err := os.MkdirAll(regDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	newerPath := filepath.Join(tmp, "clash", ".dconsole.yml")
+	if err := os.MkdirAll(filepath.Dir(newerPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(newerPath, []byte("project: clash\ndev: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(newerPath, filepath.Join(regDir, "clash.yml")); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := LoadRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Lookup("oldproj"); got != "/nonexistent/old/dconsole.yml" {
+		t.Errorf("legacy-only entry lost: %q", got)
+	}
+	if got := r.Lookup("clash"); got != newerPath {
+		t.Errorf("directory entry should win over legacy for %q: got %q, want %q", "clash", got, newerPath)
+	}
+}
+
+// TestRegistryOverridePrecedence — project-side .dconsole.override.yml
+// wins over registry-side ~/.dconsole/projects/<name>.override.yml.
+// The registry-side override is only applied when the project has none
+// (including drop-in entries with no project checkout at all).
+func TestRegistryOverridePrecedence(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	resetRegistryCache()
+
+	// Project checkout with its own .dconsole.override.yml.
+	checkout := filepath.Join(tmp, "checkout")
+	if err := os.MkdirAll(checkout, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(checkout, ".dconsole.yml")
+	if err := os.WriteFile(manifest, []byte(
+		"project: withproj\ndefault_env: dev\ndev: {}\nstage: {}\nprod: {}\n",
+	), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	projectOv := filepath.Join(checkout, ".dconsole.override.yml")
+	if err := os.WriteFile(projectOv, []byte("default_env: stage\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Registry entry + a REGISTRY-side override that would flip to prod.
+	regDir := filepath.Join(tmp, ".dconsole", "projects")
+	if err := os.MkdirAll(regDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(manifest, filepath.Join(regDir, "withproj.yml")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(regDir, "withproj.override.yml"), []byte("default_env: prod\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Project-side override wins → default_env should be "stage".
+	m, err := LoadManifestByName("withproj", manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.DefaultEnv != "stage" {
+		t.Errorf("project-side override should win: DefaultEnv=%q, want %q", m.DefaultEnv, "stage")
+	}
+
+	// Drop-in: no project-side override → registry-side applies.
+	// Create a second project with NO project-side override.
+	checkout2 := filepath.Join(tmp, "checkout2")
+	if err := os.MkdirAll(checkout2, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest2 := filepath.Join(checkout2, ".dconsole.yml")
+	if err := os.WriteFile(manifest2, []byte(
+		"project: dropin\ndefault_env: dev\ndev: {}\nstage: {}\nprod: {}\n",
+	), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(manifest2, filepath.Join(regDir, "dropin.yml")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(regDir, "dropin.override.yml"), []byte("default_env: prod\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	m2, err := LoadManifestByName("dropin", manifest2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m2.DefaultEnv != "prod" {
+		t.Errorf("registry-side override should apply when project has none: DefaultEnv=%q, want %q", m2.DefaultEnv, "prod")
+	}
+}
+
+// TestRegistryConflictRefused — Register refuses to overwrite a live
+// entry pointing at a different path (user must Forget one side first).
+// Dangling entries CAN be silently replaced.
+func TestRegistryConflictRefused(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	resetRegistryCache()
+
+	// Register one path first.
+	target1 := filepath.Join(tmp, "one", ".dconsole.yml")
+	if err := os.MkdirAll(filepath.Dir(target1), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target1, []byte("project: proj\ndev: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := LoadRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Register("proj", target1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Different existing path → refuse.
+	target2 := filepath.Join(tmp, "two", ".dconsole.yml")
+	if err := os.MkdirAll(filepath.Dir(target2), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target2, []byte("project: proj\ndev: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Register("proj", target2); err == nil {
+		t.Error("expected conflict error when re-registering same name at a different live path")
+	}
+
+	// Delete target1 → the entry is now dangling → Register should replace.
+	if err := os.RemoveAll(filepath.Dir(target1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Register("proj", target2); err != nil {
+		t.Errorf("expected dangling entry to be replaceable, got: %v", err)
+	}
+	if got := r.Lookup("proj"); got != target2 {
+		t.Errorf("Lookup after replace: got %q, want %q", got, target2)
 	}
 }

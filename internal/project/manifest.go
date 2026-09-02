@@ -77,6 +77,9 @@ type Manifest struct {
 // useful for per-machine / per-deployment config that shouldn't be
 // committed. When both dot- and plain-forms of the override exist,
 // the dot-form wins.
+//
+// See LoadManifestByName for the registry-driven path that also
+// considers ~/.dconsole/projects/<name>.override.yml as a fallback.
 func LoadManifest(path string) (*Manifest, error) {
 	m, err := loadManifestFile(path, manifestLoadOpts{requireEnvs: true, inferProject: true})
 	if err != nil {
@@ -90,6 +93,40 @@ func LoadManifest(path string) (*Manifest, error) {
 		mergeOverride(m, ov)
 		m.OverridePath = ov.AbsPath
 	}
+	return m, nil
+}
+
+// LoadManifestByName loads a registered project manifest by its name.
+// This is the wrapper the loader's ProjectLookup uses for @site.env
+// resolution — it applies the same sibling-override rule LoadManifest
+// does, PLUS a registry-side fallback: if the project checkout has no
+// .dconsole.override.yml (or the entry is a standalone drop-in file
+// with no checkout at all), a ~/.dconsole/projects/<name>.override.yml
+// is layered on top instead.
+//
+// The project-side override still wins when both exist — "closest
+// override wins", matching the general rule that a real project
+// checkout is authoritative for its own config.
+func LoadManifestByName(name, path string) (*Manifest, error) {
+	m, err := LoadManifest(path)
+	if err != nil {
+		return nil, err
+	}
+	if m.OverridePath != "" {
+		// Project-side override already applied. Registry-side is a
+		// fallback, not a layer — skip it entirely.
+		return m, nil
+	}
+	regOv := LookupOverride(name)
+	if regOv == "" {
+		return m, nil
+	}
+	ov, err := loadManifestFile(regOv, manifestLoadOpts{requireEnvs: false, inferProject: false})
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", regOv, err)
+	}
+	mergeOverride(m, ov)
+	m.OverridePath = ov.AbsPath
 	return m, nil
 }
 

@@ -532,10 +532,11 @@ transport path for everything else.
 ## Project bookkeeping
 
 ```sh
-dconsole project:init       # write a .dconsole.yml in cwd (project metadata)
-dconsole project:register   # remember this dir so @site.env resolves from anywhere inside it
-dconsole project:list
-dconsole project:forget     # unregister cwd (or pass a path)
+dconsole project:init                      # write a .dconsole.yml in cwd (project metadata)
+dconsole project:register                  # symlink cwd's manifest into the registry
+dconsole project:register /path/to/x.yml   # COPY a downloaded manifest into the registry
+dconsole project:list                      # registered projects (shows symlink vs drop-in)
+dconsole project:forget <name>             # unregister
 ```
 
 `.dconsole.yml` is project metadata (plugin pins, default alias hints).
@@ -543,6 +544,38 @@ dconsole project:forget     # unregister cwd (or pass a path)
 Both legacy `dconsole.yml` / `dconsole.override.yml` (no leading dot)
 are still accepted for backwards compat; when both forms exist in the
 same directory the dotfile wins.
+
+### The registry — two ways to make `@site.env` reach everywhere
+
+Registered projects live under `~/.dconsole/projects/`. Each entry is
+`<name>.yml`, in one of two forms:
+
+- **Symlink** — points at a real `.dconsole.yml` inside a project
+  checkout. Created by `dconsole project:register` (no args) run from
+  inside the checkout. Standard workflow.
+
+- **Drop-in file** — a regular file at
+  `~/.dconsole/projects/<name>.yml` with the manifest content copied
+  in. There is *no local checkout on disk*. Created by
+  `dconsole project:register /path/to/downloaded.yml` — grab a
+  manifest out of a GitHub gist, a shared drive, an email, wherever,
+  and point at it. `dconsole @name.env <cmd>` works from anywhere
+  immediately — the transport (ssh, docker, kubectl, …) reaches the
+  remote directly; you never need to clone the Drupal source. This
+  is one of the two things dconsole exists for — the other being
+  transport-agnostic plugins.
+
+Overrides work the same either way, with an extra layer for drop-ins:
+
+- `<checkout>/.dconsole.override.yml` — project-side override, wins
+  whenever present (closest-override rule)
+- `~/.dconsole/projects/<name>.override.yml` — registry-side override,
+  applies as a *fallback* when the project has no sibling override
+  (and is the only override that can exist for a drop-in entry)
+
+The `~/.dconsole/projects.yml` single-file registry from earlier
+versions is still read for backwards compat; new registrations always
+write to the directory form.
 
 ## Caches
 

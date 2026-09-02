@@ -85,7 +85,7 @@ func run(ctx context.Context, args []string) error {
 		}
 		return command.AliasDump(loader, args[1], os.Stdout)
 	case "project:register":
-		return command.ProjectRegister(os.Stdout)
+		return command.ProjectRegister(os.Stdout, args[1:])
 	case "project:list":
 		return command.ProjectList(os.Stdout)
 	case "project:forget":
@@ -579,7 +579,7 @@ Usage:
   dconsole alias:convert drush.site.yml > dconsole.site.yml  # port a Drush 13 alias file
   dconsole alias:dump <@ref-or-uri>          # render the YAML equivalent (handy for inline URIs)
   dconsole project:init [--yes] [--force] [--dry-run]  # detect project sources and generate .dconsole.yml
-  dconsole project:register                 # register the .dconsole.yml (or legacy dconsole.yml) at-or-above cwd
+  dconsole project:register [path]          # symlink cwd's manifest into the registry, OR copy a downloaded .dconsole.yml into it (no local Drupal source needed)
   dconsole project:list                     # list registered projects
   dconsole project:forget <name>            # remove a project from the registry
   dconsole plugin install <name>            # install a transport/provider plugin (or --path=tgz, --url=… --sha256=…)
@@ -602,7 +602,8 @@ Aliases come from (in priority order):
   $PWD/dconsole/sites/*.site.yml
   $XDG_CONFIG_HOME/dconsole/sites/*.site.yml
   ~/.dconsole/sites/*.site.yml
-  ~/.dconsole/projects.yml  (auto-managed via project:register)
+  ~/.dconsole/projects/<name>.yml  (symlink or drop-in; auto-managed via project:register)
+  ~/.dconsole/projects.yml         (legacy pre-v0.5.13 registry; still read)
 
 Manifest filenames:
   Primary   .dconsole.yml            .dconsole.override.yml (per-machine)
