@@ -383,14 +383,19 @@ func TestRegistryRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The entry is a symlink at ~/.dconsole/projects/demo.yml → target.
+	// The entry exists at ~/.dconsole/projects/demo.yml. Its on-disk
+	// shape depends on the platform — symlink on Unix, pointer file
+	// on Windows. Accept either; what matters is that Lookup resolves
+	// back to the original target (asserted below).
 	entry := filepath.Join(tmp, ".dconsole", "projects", "demo.yml")
 	info, err := os.Lstat(entry)
 	if err != nil {
 		t.Fatalf("Register didn't create %s: %v", entry, err)
 	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Errorf("expected symlink at %s; got mode %v", entry, info.Mode())
+	isSymlink := info.Mode()&os.ModeSymlink != 0
+	isPointer := info.Mode().IsRegular() && IsPointerEntry(entry)
+	if !isSymlink && !isPointer {
+		t.Errorf("expected a symlink OR a pointer file at %s; got mode %v", entry, info.Mode())
 	}
 
 	// Drop the cache, reload from disk — Lookup should still find it.
