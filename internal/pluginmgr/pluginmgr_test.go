@@ -1,3 +1,10 @@
+//go:build !windows
+
+// Skipped on Windows — tests construct tarballs whose "binary"
+// payload is a #!/bin/sh script, which Windows can't exec. Plugin
+// support on Windows needs a separate design pass (naming
+// convention, .exe handling in PluginDir enumeration).
+
 package pluginmgr
 
 import (
@@ -69,7 +76,11 @@ func TestInstall_FromPathPlacesBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat installed binary: %v", err)
 	}
-	if info.Mode()&0o111 == 0 {
+	// Executable-mode bits are a Unix concept; Windows gets executability
+	// from the file extension (.exe / .bat / .cmd), not from a mode mask.
+	// Skip the mode check there — the surrounding Install call still has
+	// to succeed, which is the thing that actually matters.
+	if runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
 		t.Errorf("installed binary is not executable: mode %v", info.Mode())
 	}
 }

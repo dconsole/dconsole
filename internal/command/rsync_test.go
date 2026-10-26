@@ -1,3 +1,8 @@
+//go:build !windows
+
+// Skipped on Windows — relies on #!/bin/sh fake drush binaries. See
+// auth_test.go for the full note.
+
 package command
 
 import (
@@ -67,7 +72,7 @@ esac
 	}
 
 	// Use a fresh HOME so sitepath disk cache doesn't pollute the test.
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	dst := t.TempDir()
 	srcE := &Endpoint{Alias: a, PathSpec: "%files"}

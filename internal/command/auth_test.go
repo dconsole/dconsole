@@ -1,3 +1,11 @@
+//go:build !windows
+
+// Skipped on Windows: this file's fake drush/provider binaries are
+// POSIX shell scripts with `#!/bin/sh`. Windows can't exec them
+// directly (no shebang support). Rewriting the fakes as tiny Go-
+// built binaries would restore coverage on Windows but is out of
+// scope for v0.5.x.
+
 package command
 
 import (

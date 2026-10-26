@@ -1,3 +1,8 @@
+//go:build !windows
+
+// Skipped on Windows — relies on #!/bin/sh fake drush binaries. See
+// auth_test.go for the full note.
+
 package command
 
 import (
@@ -62,7 +67,7 @@ func TestHelp_MergesDrushAndDconsoleCommands(t *testing.T) {
 		Bin:       alias.RemoteBin{Kind: "drush", Path: bin},
 		Transport: alias.NewTransport("exec", nil),
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	var out bytes.Buffer
 	fallbackCalled := false
@@ -115,7 +120,7 @@ func TestHelp_DconsoleWinsOnNameClash(t *testing.T) {
 		Bin:       alias.RemoteBin{Kind: "drush", Path: bin},
 		Transport: alias.NewTransport("exec", nil),
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	var out bytes.Buffer
 	if err := Help(context.Background(), a, &out, func(w io.Writer) {}); err != nil {
@@ -148,7 +153,7 @@ func TestHelp_FallsBackOnBadJSON(t *testing.T) {
 		Bin:       alias.RemoteBin{Kind: "drush", Path: bin},
 		Transport: alias.NewTransport("exec", nil),
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	called := false
 	var out bytes.Buffer
@@ -306,7 +311,7 @@ func TestHelp_FallsBackToDrush8(t *testing.T) {
 		Bin:       alias.RemoteBin{Kind: "drush", Path: bin},
 		Transport: alias.NewTransport("exec", nil),
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	var out bytes.Buffer
 	if err := Help(context.Background(), a, &out, func(w io.Writer) {
@@ -354,7 +359,7 @@ func TestHelp_TolerantOfPrefixGarbage(t *testing.T) {
 		Bin:       alias.RemoteBin{Kind: "drush", Path: bin},
 		Transport: alias.NewTransport("exec", nil),
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	called := false
 	var out bytes.Buffer

@@ -361,7 +361,7 @@ func resetRegistryCache() {
 
 func TestRegistryRoundtrip(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	setTestHome(t, tmp)
 	resetRegistryCache()
 
 	// Manifest that Register() will point at. Register does an existence
@@ -420,7 +420,7 @@ func TestRegistryRoundtrip(t *testing.T) {
 // This is the "run drush without local Drupal source" workflow.
 func TestRegistryDropInFile(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	setTestHome(t, tmp)
 	resetRegistryCache()
 
 	dir := filepath.Join(tmp, ".dconsole", "projects")
@@ -458,7 +458,7 @@ func TestRegistryDropInFile(t *testing.T) {
 // are still readable. Directory entries win on conflict.
 func TestRegistryLegacyFileFallback(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	setTestHome(t, tmp)
 	resetRegistryCache()
 
 	// Legacy file only.
@@ -506,7 +506,7 @@ func TestRegistryLegacyFileFallback(t *testing.T) {
 // (including drop-in entries with no project checkout at all).
 func TestRegistryOverridePrecedence(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	setTestHome(t, tmp)
 	resetRegistryCache()
 
 	// Project checkout with its own .dconsole.override.yml.
@@ -579,7 +579,7 @@ func TestRegistryOverridePrecedence(t *testing.T) {
 // Dangling entries CAN be silently replaced.
 func TestRegistryConflictRefused(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	setTestHome(t, tmp)
 	resetRegistryCache()
 
 	// Register one path first.
@@ -628,7 +628,7 @@ func TestRegistryConflictRefused(t *testing.T) {
 // test knob so one assertion covers both platforms.
 func TestRegistryPointerFileRoundtrip(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	setTestHome(t, tmp)
 	resetRegistryCache()
 
 	// Force the Windows code path even though we're probably on Unix.

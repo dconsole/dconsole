@@ -1,3 +1,8 @@
+//go:build !windows
+
+// Skipped on Windows — relies on #!/bin/sh fake drush binaries. See
+// auth_test.go for the full note.
+
 package command
 
 import (
@@ -60,7 +65,7 @@ func TestLogin_OpensExtractedURL(t *testing.T) {
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
 		Transport: alias.NewTransport("exec", nil),
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	var out bytes.Buffer
 	if err := Login(context.Background(), a, nil, &out); err != nil {
@@ -94,7 +99,7 @@ func TestLogin_NoURLReturnsError(t *testing.T) {
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
 		Transport: alias.NewTransport("exec", nil),
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	err := Login(context.Background(), a, nil, &bytes.Buffer{})
 	if err == nil {
@@ -126,7 +131,7 @@ func TestLogin_ForwardsExtraArgs(t *testing.T) {
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
 		Transport: alias.NewTransport("exec", nil),
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	if err := Login(context.Background(), a, []string{"--name=admin", "/node/42"}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Login: %v", err)
@@ -163,7 +168,7 @@ func TestLogin_InjectsAliasURI(t *testing.T) {
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
 		Transport: alias.NewTransport("exec", nil),
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	if err := Login(context.Background(), a, nil, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Login: %v", err)
@@ -199,7 +204,7 @@ func TestLogin_UserURIWins(t *testing.T) {
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
 		Transport: alias.NewTransport("exec", nil),
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	if err := Login(context.Background(), a, []string{"--uri=https://override.example.com"}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("Login: %v", err)
@@ -232,7 +237,7 @@ func TestLogin_NoURIWarns(t *testing.T) {
 		Bin:       alias.RemoteBin{Kind: "drush", Path: fakeBin},
 		Transport: alias.NewTransport("exec", nil),
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 
 	var out bytes.Buffer
 	if err := Login(context.Background(), a, nil, &out); err != nil {

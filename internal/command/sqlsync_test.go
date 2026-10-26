@@ -1,3 +1,8 @@
+//go:build !windows
+
+// Skipped on Windows — relies on #!/bin/sh fake drush binaries. See
+// auth_test.go for the full note.
+
 package command
 
 import (

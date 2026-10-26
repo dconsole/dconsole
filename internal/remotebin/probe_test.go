@@ -3,7 +3,6 @@ package remotebin
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -169,13 +168,13 @@ func TestProbeCacheReusesResult(t *testing.T) {
 func withTempCache(t *testing.T) {
 	t.Helper()
 	tmp := t.TempDir()
-	old, _ := os.LookupEnv("HOME")
-	if err := os.Setenv("HOME", tmp); err != nil {
-		t.Fatal(err)
-	}
+	// Set both — HOME on Unix, USERPROFILE on Windows. os.UserHomeDir
+	// reads USERPROFILE on Windows, so setting only HOME silently
+	// escapes the tmp dir there and tests poke the real runner home.
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	memoCache = &cache{}
 	t.Cleanup(func() {
-		os.Setenv("HOME", old)
 		memoCache = &cache{}
 	})
 }

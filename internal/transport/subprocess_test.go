@@ -1,3 +1,10 @@
+//go:build !windows
+
+// Skipped on Windows — the plugin discovery layer hardcodes
+// `dconsole-<name>` with no .exe handling, so a built Go plugin
+// binary isn't exec'd by Windows. Needs a separate design pass on
+// plugin naming conventions for Windows support.
+
 package transport
 
 import (
