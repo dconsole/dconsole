@@ -1,6 +1,7 @@
 package project
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -618,5 +619,110 @@ func TestRegistryConflictRefused(t *testing.T) {
 	}
 	if got := r.Lookup("proj"); got != target2 {
 		t.Errorf("Lookup after replace: got %q, want %q", got, target2)
+	}
+}
+
+// TestRegistryPointerFileRoundtrip — on Windows (and anywhere else
+// symlinks are refused) Register writes a POINTER FILE instead of a
+// symlink. Lookup transparently follows it. Forced on Unix via a
+// test knob so one assertion covers both platforms.
+func TestRegistryPointerFileRoundtrip(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	resetRegistryCache()
+
+	// Force the Windows code path even though we're probably on Unix.
+	t.Cleanup(func() { forcePointerForTest = false })
+	forcePointerForTest = true
+
+	target := filepath.Join(tmp, "proj", ".dconsole.yml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("project: ptr\ndev: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := LoadRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Register("ptr", target); err != nil {
+		t.Fatal(err)
+	}
+
+	entry := filepath.Join(tmp, ".dconsole", "projects", "ptr.yml")
+	info, err := os.Lstat(entry)
+	if err != nil {
+		t.Fatalf("Register didn't create %s: %v", entry, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Error("expected a regular pointer file (forced), got a symlink")
+	}
+	if !IsPointerEntry(entry) {
+		t.Error("entry should be classified as pointer")
+	}
+
+	// Pointer content: the _dconsole_pointer key with the absolute
+	// target path. No stray fields that would confuse later tooling.
+	data, err := os.ReadFile(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte("_dconsole_pointer: "+target)) {
+		t.Errorf("pointer content missing or wrong, got:\n%s", data)
+	}
+
+	// Reload and resolve — Lookup follows the pointer transparently.
+	resetRegistryCache()
+	r2, err := LoadRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r2.Lookup("ptr"); got != target {
+		t.Errorf("Lookup through pointer: got %q, want %q", got, target)
+	}
+
+	// End-to-end: LoadManifestByName should read the real manifest
+	// via the pointer.
+	m, err := LoadManifestByName("ptr", r2.Lookup("ptr"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Project != "ptr" {
+		t.Errorf("Project through pointer: %q, want %q", m.Project, "ptr")
+	}
+
+	// Forget removes the pointer file, same as a symlink.
+	if err := r2.Forget("ptr"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(entry); err == nil {
+		t.Errorf("Forget didn't remove pointer file at %s", entry)
+	}
+}
+
+// TestRegistryPointerVsDropIn — a drop-in regular file (no pointer
+// key) must NOT be mistaken for a pointer. Classification: the
+// IsPointerEntry sentinel is what distinguishes the two.
+func TestRegistryPointerVsDropIn(t *testing.T) {
+	tmp := t.TempDir()
+	regDir := filepath.Join(tmp, ".dconsole", "projects")
+	if err := os.MkdirAll(regDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dropIn := filepath.Join(regDir, "a.yml")
+	if err := os.WriteFile(dropIn, []byte("project: a\ndev: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pointer := filepath.Join(regDir, "b.yml")
+	if err := writePointerFile(pointer, filepath.Join(tmp, "b", ".dconsole.yml")); err != nil {
+		t.Fatal(err)
+	}
+	if IsPointerEntry(dropIn) {
+		t.Error("drop-in misclassified as pointer")
+	}
+	if !IsPointerEntry(pointer) {
+		t.Error("pointer misclassified as drop-in")
 	}
 }

@@ -190,7 +190,17 @@ func ProjectList(out io.Writer) error {
 				case info.Mode()&os.ModeSymlink != 0:
 					kind = "symlink"
 				case info.Mode().IsRegular():
-					kind = "drop-in"
+					// A regular file might be a Windows-safe pointer
+					// file (redirecting elsewhere) or a true drop-in
+					// (the file itself IS the manifest). Peek at the
+					// contents to tell them apart — the project.Lookup
+					// above already resolved the target either way,
+					// so this is purely a display concern.
+					if project.IsPointerEntry(entry) {
+						kind = "pointer"
+					} else {
+						kind = "drop-in"
+					}
 				}
 			} else {
 				kind = "legacy"

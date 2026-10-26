@@ -1,9 +1,11 @@
 package project
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -152,10 +154,33 @@ func parseRegistryEntry(filename string) (name string, kind registryEntryKind) {
 	return "", registryEntryUnknown
 }
 
+// pointerKey is the YAML key a pointer file uses to redirect to the
+// real manifest. The pointer file is the Windows-safe equivalent of a
+// symlink: Windows requires admin rights or dev-mode to create one,
+// but any user can write a plain file. A pointer file is a valid YAML
+// document with just this key — it works equally well on every
+// platform, so Register uses it unconditionally on Windows and users
+// on Unix see it occasionally too (e.g. restoring a cross-platform
+// backup).
+const pointerKey = "_dconsole_pointer"
+
+// pointerFile is the on-disk shape of a pointer entry. The whole file
+// is one line of YAML. Content kept minimal — the registry carries
+// just the redirect, no project metadata.
+type pointerFile struct {
+	Pointer string `yaml:"_dconsole_pointer"`
+}
+
 // resolveRegistryEntry returns the absolute path a registry entry
-// resolves to. For symlinks, follows one level (Readlink) and returns
-// the absolute target. For regular files, returns the entry's own
-// absolute path (drop-in workflow — the file IS the manifest).
+// resolves to. Three shapes are supported:
+//
+//   - **Symlink** — follow via Readlink; return the absolute target.
+//     Unix default. On Windows, created by users with dev-mode on.
+//   - **Pointer file** — a regular YAML file whose only key is
+//     `_dconsole_pointer: /abs/path`. Return that path. Windows
+//     default (where symlinks need admin).
+//   - **Drop-in file** — any other regular file. Return the entry's
+//     own path (the file IS the manifest; no local checkout exists).
 func resolveRegistryEntry(entryPath string) (string, error) {
 	info, err := os.Lstat(entryPath)
 	if err != nil {
@@ -173,8 +198,87 @@ func resolveRegistryEntry(entryPath string) (string, error) {
 		}
 		return filepath.Clean(target), nil
 	}
+	// Regular file: could be a pointer or a drop-in. Pointer-ness
+	// is cheap to detect — read the file (registry entries are tiny)
+	// and look for the sentinel key.
+	if target := readPointerTarget(entryPath); target != "" {
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(entryPath), target)
+		}
+		return filepath.Clean(target), nil
+	}
 	return filepath.Clean(entryPath), nil
 }
+
+// IsPointerEntry reports whether a registry entry at entryPath is a
+// pointer file (as opposed to a true drop-in manifest). Used by
+// project:list to label the entry kind. Returns false for anything
+// that isn't a regular file whose contents parse as a pointer.
+func IsPointerEntry(entryPath string) bool {
+	return readPointerTarget(entryPath) != ""
+}
+
+// readPointerTarget returns the pointer target if entryPath is a
+// pointer file, or "" if it's a drop-in or unreadable. Read errors
+// are swallowed — caller falls back to treating the file as a drop-in,
+// which will surface a parse error at manifest-load time with better
+// context.
+func readPointerTarget(entryPath string) string {
+	data, err := os.ReadFile(entryPath)
+	if err != nil {
+		return ""
+	}
+	// Quick substring guard — avoids a YAML parse on every registry
+	// entry when the pointer key isn't present.
+	if !bytes.Contains(data, []byte(pointerKey)) {
+		return ""
+	}
+	var p pointerFile
+	if err := yaml.Unmarshal(data, &p); err != nil {
+		return ""
+	}
+	return p.Pointer
+}
+
+// writePointerFile creates a pointer file at entryPath redirecting to
+// target. Used as the Windows fallback when os.Symlink fails (and
+// unconditionally on Windows to avoid the privilege-required attempt).
+func writePointerFile(entryPath, target string) error {
+	data, err := yaml.Marshal(pointerFile{Pointer: target})
+	if err != nil {
+		return err
+	}
+	// Prepend a short comment so humans peeking at the file see what
+	// it is without having to recognise the key name.
+	content := []byte("# dconsole project registry pointer (Windows-safe symlink equivalent)\n")
+	content = append(content, data...)
+	return os.WriteFile(entryPath, content, 0o600)
+}
+
+// writeRegistryEntry creates the on-disk entry at entryPath pointing
+// at target. On Unix it tries os.Symlink first (the native, zero-cost
+// form); on failure it falls back to a pointer file. On Windows it
+// writes a pointer file unconditionally — symlinks there need admin
+// rights or developer mode, and quietly degrading to a pointer file
+// avoids a confusing "operation not permitted" that most users can't
+// resolve. forcePointerForTest is a test knob so pointer-write code
+// paths get exercised on Unix CI.
+func writeRegistryEntry(entryPath, target string) error {
+	if runtime.GOOS == "windows" || forcePointerForTest {
+		return writePointerFile(entryPath, target)
+	}
+	if err := os.Symlink(target, entryPath); err == nil {
+		return nil
+	}
+	// Last-ditch fallback — some mounted filesystems forbid symlinks
+	// even on Unix (SMB, certain Docker-mounted volumes).
+	return writePointerFile(entryPath, target)
+}
+
+// forcePointerForTest, when true, makes writeRegistryEntry skip the
+// symlink attempt and always write a pointer file. Used by tests on
+// Unix to cover the Windows code path.
+var forcePointerForTest bool
 
 // LookupOverride returns the absolute path of the registry-side
 // override for name (~/.dconsole/projects/<name>.override.yml) if it
@@ -230,8 +334,20 @@ func (r *Registry) Save() error {
 	return nil
 }
 
-// Register adds or updates an entry as a symlink at
-// ~/.dconsole/projects/<name>.yml → manifestPath.
+// Register adds or updates an entry at ~/.dconsole/projects/<name>.yml
+// pointing at manifestPath. The on-disk form depends on the platform:
+//
+//   - Unix: a symlink. If os.Symlink fails for some unexpected reason,
+//     falls back to a pointer file.
+//   - Windows: a pointer file. os.Symlink there needs admin rights or
+//     dev-mode, so we skip the attempt and write a pointer file
+//     unconditionally — users don't want to re-run as admin for a
+//     local-only bookkeeping call.
+//
+// Either way the LOGICAL behaviour is identical: Lookup returns the
+// manifest's absolute path and dconsole proceeds as if the manifest
+// lived there directly. The pointer file is simply the Windows-safe
+// equivalent of a symlink.
 //
 // If an existing entry already points to a DIFFERENT existing manifest,
 // refuse — the user should Forget one side first or rename. Existing
@@ -269,14 +385,15 @@ func (r *Registry) Register(name, manifestPath string) error {
 		return err
 	}
 	entryPath := filepath.Join(dir, name+".yml")
-	// Remove any existing entry (symlink or regular file) before
-	// creating the new symlink. os.Symlink refuses to overwrite.
+	// Remove any existing entry (symlink, pointer file, or drop-in)
+	// before writing the new one. os.Symlink refuses to overwrite, and
+	// a stale pointer could silently redirect.
 	if _, err := os.Lstat(entryPath); err == nil {
 		if err := os.Remove(entryPath); err != nil {
 			return err
 		}
 	}
-	if err := os.Symlink(abs, entryPath); err != nil {
+	if err := writeRegistryEntry(entryPath, abs); err != nil {
 		return err
 	}
 	r.fromDir[name] = abs
