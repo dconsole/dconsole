@@ -96,3 +96,43 @@ func TestAliasDumpModernRoundtrips(t *testing.T) {
 		t.Errorf("output missing host; got:\n%s", got)
 	}
 }
+
+// TestAliasDumpPreservesPluginConfig — a handler whose config lives
+// only in Raw (unknown-at-build-time plugin, no typed field) must
+// still have that config echoed in the dump output. Regression guard
+// for the fix where struct marshaling silently dropped Raw-only keys.
+func TestAliasDumpPreservesPluginConfig(t *testing.T) {
+	dir := t.TempDir()
+	sites := filepath.Join(dir, "dconsole", "sites")
+	if err := os.MkdirAll(sites, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// `acquia` isn't an in-tree handler, so none of alias.Handler's
+	// typed pointer fields match it — the config lives in Raw only.
+	yml := []byte(`dev:
+  handler:
+    type: acquia
+    acquia:
+      alias: myapp.dev
+      cmd_prefix: [acli, remote:drush]
+`)
+	if err := os.WriteFile(filepath.Join(sites, "pluginhandler.site.yml"), yml, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	loader := alias.NewLoader()
+	WireProjectResolution(loader)
+
+	var buf bytes.Buffer
+	if err := AliasDump(loader, "@pluginhandler.dev", &buf); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+
+	for _, want := range []string{"type: acquia", "acquia:", "alias: myapp.dev", "cmd_prefix:", "acli", "remote:drush"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("plugin-handler config lost from dump — missing %q; got:\n%s", want, got)
+		}
+	}
+}
