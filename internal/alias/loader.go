@@ -248,6 +248,23 @@ func MergeDefaults(defaults, a Alias) Alias {
 	if a.SQL.Target.Type == "" {
 		a.SQL.Target = defaults.SQL.Target
 	}
+	if a.Assets.Cache.TTL == "" {
+		a.Assets.Cache.TTL = defaults.Assets.Cache.TTL
+	}
+	// Policy MUST carry through: the project override merge layers a
+	// per-laptop env block (often just `handler:`) over the committed one
+	// with this function, and dropping Policy there silently un-protects
+	// e.g. prod. Merge per field so an override can tighten one list
+	// without restating the rest.
+	if a.Policy.SyncPolicy == "" {
+		a.Policy.SyncPolicy = defaults.Policy.SyncPolicy
+	}
+	if len(a.Policy.AllowSyncFrom) == 0 {
+		a.Policy.AllowSyncFrom = defaults.Policy.AllowSyncFrom
+	}
+	if len(a.Policy.AllowSyncTo) == 0 {
+		a.Policy.AllowSyncTo = defaults.Policy.AllowSyncTo
+	}
 	if len(a.EnvVars) == 0 {
 		a.EnvVars = defaults.EnvVars
 	}
