@@ -495,13 +495,13 @@ func runSqlSync(ctx context.Context, loader *alias.Loader, args []string) error 
 		}
 	}
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: dconsole sql:sync @source.env @target.env [flags]\n  run `dconsole sql:sync --help` for the full reference")
+		return fmt.Errorf("usage: dconsole sql:sync @source[.env] @target[.env] [flags]\n  run `dconsole sql:sync --help` for the full reference")
 	}
-	source, err := loader.ResolveRef(positional[0])
+	source, err := command.ResolveRef(loader, positional[0])
 	if err != nil {
 		return fmt.Errorf("source: %w", err)
 	}
-	target, err := loader.ResolveRef(positional[1])
+	target, err := command.ResolveRef(loader, positional[1])
 	if err != nil {
 		return fmt.Errorf("target: %w", err)
 	}

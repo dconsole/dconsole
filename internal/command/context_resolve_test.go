@@ -144,3 +144,54 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+// ResolveRef backs the positional aliases of sql:sync / rsync / inspect
+// sql:sync, so `dconsole sql:sync @prod @local` must infer the site from
+// cwd's manifest just like `dconsole @prod status` does.
+func TestResolveRef_ShortAndFullForms(t *testing.T) {
+	dir := withProjectManifest(t, `
+project: ex
+default_env: dev
+dev: { uri: https://dev.ex.com, transport: { type: exec, exec: {} } }
+prod: { uri: https://www.ex.com, transport: { type: exec, exec: {} } }
+`)
+	t.Chdir(dir)
+	loader := &alias.Loader{}
+	WireProjectResolution(loader)
+
+	for _, ref := range []string{"@prod", "@ex.prod"} {
+		a, err := ResolveRef(loader, ref)
+		if err != nil {
+			t.Fatalf("%s: %v", ref, err)
+		}
+		if a.Site != "ex" || a.Env != "prod" {
+			t.Errorf("%s resolved to @%s.%s, want @ex.prod", ref, a.Site, a.Env)
+		}
+	}
+}
+
+func TestResolveRef_RejectsNonAlias(t *testing.T) {
+	dir := withProjectManifest(t, `
+project: ex
+default_env: dev
+dev: { uri: https://dev.ex.com, transport: { type: exec, exec: {} } }
+`)
+	t.Chdir(dir)
+	loader := &alias.Loader{}
+	WireProjectResolution(loader)
+
+	for _, ref := range []string{"prod", "@", ""} {
+		if _, err := ResolveRef(loader, ref); err == nil {
+			t.Errorf("ResolveRef(%q) succeeded; want error (must not fall back to default_env)", ref)
+		}
+	}
+}
+
+func TestResolveRef_ShortRefNoProjectFails(t *testing.T) {
+	t.Chdir(t.TempDir())
+	loader := &alias.Loader{}
+	WireProjectResolution(loader)
+	if _, err := ResolveRef(loader, "@prod"); err == nil {
+		t.Fatal("expected error for @prod with no manifest")
+	}
+}

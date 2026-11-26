@@ -54,7 +54,7 @@ func ParseEndpoint(token string, loader *alias.Loader) (*Endpoint, error) {
 		} else {
 			ref, spec = token[:colon], token[colon+1:]
 		}
-		a, err := loader.ResolveRef(ref)
+		a, err := ResolveRef(loader, ref)
 		if err != nil {
 			return nil, err
 		}

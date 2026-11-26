@@ -219,11 +219,11 @@ func inspectSqlSync(ctx context.Context, loader *alias.Loader, args []string, ou
 	if len(positional) != 2 {
 		return fmt.Errorf("inspect sql:sync expects 2 aliases (got %d)", len(positional))
 	}
-	source, err := loader.ResolveRef(positional[0])
+	source, err := ResolveRef(loader, positional[0])
 	if err != nil {
 		return fmt.Errorf("source: %w", err)
 	}
-	target, err := loader.ResolveRef(positional[1])
+	target, err := ResolveRef(loader, positional[1])
 	if err != nil {
 		return fmt.Errorf("target: %w", err)
 	}
