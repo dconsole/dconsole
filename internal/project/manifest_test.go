@@ -185,6 +185,47 @@ prod:
 	}
 }
 
+// TestLoadManifest_OverrideKeepsPolicy guards against an override that
+// only swaps the handler (e.g. a per-laptop ssh key) silently dropping
+// the committed sync policy and un-protecting prod.
+func TestLoadManifest_OverrideKeepsPolicy(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "dconsole.yml")
+	override := filepath.Join(dir, "dconsole.override.yml")
+	mustWrite(t, base, `
+project: demo
+prod:
+  uri: https://www.example.com
+  handler:
+    type: ssh
+    ssh: { host: prod.example.com, user: deploy }
+  policy:
+    sync_policy: protected
+    allow_sync_to: [stage]
+`)
+	mustWrite(t, override, `
+prod:
+  handler:
+    type: ssh
+    ssh: { host: prod.example.com, user: deploy, identity_file: ~/.ssh/other }
+`)
+
+	m, err := LoadManifest(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prod, err := m.ResolveEnv("prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prod.Policy.SyncPolicy != "protected" {
+		t.Errorf("SyncPolicy = %q, want protected (override must not drop policy)", prod.Policy.SyncPolicy)
+	}
+	if len(prod.Policy.AllowSyncTo) != 1 || prod.Policy.AllowSyncTo[0] != "stage" {
+		t.Errorf("AllowSyncTo = %v, want [stage]", prod.Policy.AllowSyncTo)
+	}
+}
+
 // TestLoadManifest_OverrideAddsNewEnv lets ops introduce a new env via
 // override (e.g. a container-local "self" alias) without touching the
 // shared dconsole.yml.
