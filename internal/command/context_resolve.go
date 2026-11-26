@@ -192,3 +192,20 @@ func localAlias() *alias.Alias {
 		Handler: alias.NewHandler("exec", alias.ExecTransport{Dir: cwd}),
 	}
 }
+
+// ResolveRef resolves a single alias token for commands that take
+// aliases as positional arguments (sql:sync, rsync, inspect sql:sync).
+// It accepts the same forms as an invocation's leading alias — inline
+// URI, @site.env (local manifest first), and the @env short form with
+// the site inferred from cwd's .dconsole.yml — but never falls back to
+// the default env: a token without a leading '@' is an error.
+func ResolveRef(loader *alias.Loader, ref string) (*alias.Alias, error) {
+	if !strings.HasPrefix(ref, "@") || len(ref) < 2 {
+		return nil, fmt.Errorf("invalid alias reference %q (expected @site.env or @env)", ref)
+	}
+	res, err := ResolveContextual(loader, []string{ref})
+	if err != nil {
+		return nil, err
+	}
+	return res.Alias, nil
+}
