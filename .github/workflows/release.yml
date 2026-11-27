@@ -20,13 +20,13 @@ env:
 
 jobs:
   goreleaser:
-    # macos-latest because the goreleaser notarize block shells to
-    # `codesign` and `xcrun notarytool` — both macOS-only. Public
-    # repos get free unlimited macOS minutes so the runner upgrade
-    # has no billing cost. If the signing secrets aren't set the
-    # notarize block silently skips and the build is the same as it
-    # would be on ubuntu-latest.
-    runs-on: macos-latest
+    # Self-hosted Mac (labels: self-hosted, macOS). Needs to be macOS
+    # because goreleaser's notarize block shells to `codesign` and
+    # `xcrun notarytool`. The signing secrets are still injected from
+    # GitHub secrets at job runtime — goreleaser v2's notarize keeps
+    # the cert in process memory via MACOS_SIGN_P12/PASSWORD, so this
+    # does NOT touch the runner host's login keychain.
+    runs-on: [self-hosted, macOS]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

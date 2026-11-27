@@ -21,7 +21,13 @@ jobs:
       # even while macOS/linux still pass.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # macOS leg targets the self-hosted runner (labels: self-hosted,
+        # macOS). Offloads the queue-starved public macOS pool and
+        # sidesteps the deprecation treadmill on hosted Xcode images.
+        os:
+          - ubuntu-latest
+          - [self-hosted, macOS]
+          - windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

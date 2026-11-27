@@ -36,10 +36,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest = Apple Silicon. We test the x86_64 slice via
-        # Rosetta 2 in a separate step below — same hardware, no need
-        # for the queue-starved free-tier macos-13 runner.
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # macOS leg targets the self-hosted runner (labels: self-hosted,
+        # macOS) — Apple Silicon. We test the x86_64 slice via Rosetta 2
+        # in a separate step below.
+        os:
+          - ubuntu-latest
+          - [self-hosted, macOS]
+          - windows-latest
         # Run BOTH the "latest" resolution code path AND a concrete-tag
         # pin on every release, so a regression in either kind shows up.
         version: ["latest", "${{ github.event.release.tag_name || inputs.version || 'latest' }}"]
