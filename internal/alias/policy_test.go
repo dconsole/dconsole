@@ -64,3 +64,98 @@ func TestCheckSync_ForceOverrides(t *testing.T) {
 		t.Errorf("--force should override, got %v", err)
 	}
 }
+
+func TestValidatePolicyOverride(t *testing.T) {
+	cases := []struct {
+		name     string
+		base     Policy
+		override Policy
+		wantErr  bool
+	}{
+		// --- accepted: no change / tighten ---
+		{
+			name:     "no_policy_either_side",
+			base:     Policy{},
+			override: Policy{},
+		},
+		{
+			name:     "identical_protected",
+			base:     Policy{SyncPolicy: "protected", AllowSyncFrom: []string{"dev"}},
+			override: Policy{SyncPolicy: "protected", AllowSyncFrom: []string{"dev"}},
+		},
+		{
+			name:     "tighten_open_to_protected",
+			base:     Policy{SyncPolicy: "open"},
+			override: Policy{SyncPolicy: "protected"},
+		},
+		{
+			name:     "tighten_empty_sync_policy_to_protected",
+			base:     Policy{},
+			override: Policy{SyncPolicy: "protected", AllowSyncFrom: []string{"dev"}},
+		},
+		{
+			name:     "shrink_allow_sync_from",
+			base:     Policy{SyncPolicy: "protected", AllowSyncFrom: []string{"dev", "ci"}},
+			override: Policy{SyncPolicy: "protected", AllowSyncFrom: []string{"dev"}},
+		},
+		{
+			name:     "shrink_allow_sync_to",
+			base:     Policy{AllowSyncTo: []string{"dev", "stage", "scratch"}},
+			override: Policy{AllowSyncTo: []string{"dev"}},
+		},
+		{
+			name:     "tighten_list_to_empty_under_protected",
+			base:     Policy{SyncPolicy: "protected", AllowSyncFrom: []string{"dev"}},
+			override: Policy{SyncPolicy: "protected"},
+		},
+
+		// --- refused: loosen ---
+		{
+			name:     "loosen_protected_to_open",
+			base:     Policy{SyncPolicy: "protected", AllowSyncFrom: []string{"dev"}},
+			override: Policy{SyncPolicy: "open", AllowSyncFrom: []string{"dev"}},
+			wantErr:  true,
+		},
+		{
+			name:     "loosen_protected_to_empty",
+			base:     Policy{SyncPolicy: "protected"},
+			override: Policy{SyncPolicy: ""},
+			wantErr:  true,
+		},
+		{
+			name:     "grow_allow_sync_from",
+			base:     Policy{SyncPolicy: "protected", AllowSyncFrom: []string{"dev"}},
+			override: Policy{SyncPolicy: "protected", AllowSyncFrom: []string{"dev", "prod"}},
+			wantErr:  true,
+		},
+		{
+			name:     "drop_allow_sync_to_restriction",
+			base:     Policy{AllowSyncTo: []string{"dev"}},
+			override: Policy{AllowSyncTo: nil},
+			wantErr:  true,
+		},
+		{
+			name:     "grow_allow_sync_from_under_open",
+			base:     Policy{AllowSyncFrom: []string{"dev"}},
+			override: Policy{AllowSyncFrom: []string{"dev", "scratch"}},
+			wantErr:  true,
+		},
+		{
+			name:     "add_entry_to_empty_protected_list",
+			base:     Policy{SyncPolicy: "protected"},
+			override: Policy{SyncPolicy: "protected", AllowSyncFrom: []string{"dev"}},
+			wantErr:  true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidatePolicyOverride(tc.base, tc.override)
+			if tc.wantErr && err == nil {
+				t.Errorf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("expected ok, got %v", err)
+			}
+		})
+	}
+}

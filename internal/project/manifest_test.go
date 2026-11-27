@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -223,6 +224,90 @@ prod:
 	}
 	if len(prod.Policy.AllowSyncTo) != 1 || prod.Policy.AllowSyncTo[0] != "stage" {
 		t.Errorf("AllowSyncTo = %v, want [stage]", prod.Policy.AllowSyncTo)
+	}
+}
+
+// TestLoadManifest_OverrideRefusesLoosenedPolicy covers the
+// accident-prevention rule: an .override.yml that drops or weakens a
+// committed policy block is rejected at load time, naming the override
+// path so the operator can fix (or deliberately migrate the change
+// into the base manifest).
+func TestLoadManifest_OverrideRefusesLoosenedPolicy(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "dconsole.yml")
+	override := filepath.Join(dir, "dconsole.override.yml")
+	mustWrite(t, base, `
+project: demo
+prod:
+  uri: https://www.example.com
+  handler:
+    type: ssh
+    ssh: { host: prod.example.com, user: deploy }
+  policy:
+    sync_policy: protected
+    allow_sync_to: [stage]
+`)
+	// Override tries to open the policy up AND add a destination.
+	mustWrite(t, override, `
+prod:
+  policy:
+    sync_policy: open
+    allow_sync_to: [stage, scratch]
+`)
+
+	_, err := LoadManifest(base)
+	if err == nil {
+		t.Fatal("expected refusal, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, override) {
+		t.Errorf("error should name the override path %q; got: %v", override, err)
+	}
+	if !strings.Contains(msg, "prod") {
+		t.Errorf("error should name the env; got: %v", err)
+	}
+	if !strings.Contains(msg, "sync_policy") {
+		t.Errorf("error should name the field; got: %v", err)
+	}
+}
+
+// TestLoadManifest_OverrideAcceptsTightenedPolicy — the mirror of the
+// refusal test. Shrinking allow_sync_to is strictly more restrictive
+// and should merge cleanly.
+func TestLoadManifest_OverrideAcceptsTightenedPolicy(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "dconsole.yml")
+	override := filepath.Join(dir, "dconsole.override.yml")
+	mustWrite(t, base, `
+project: demo
+prod:
+  uri: https://www.example.com
+  handler:
+    type: ssh
+    ssh: { host: prod.example.com, user: deploy }
+  policy:
+    sync_policy: protected
+    allow_sync_to: [stage, scratch]
+`)
+	mustWrite(t, override, `
+prod:
+  policy:
+    allow_sync_to: [stage]
+`)
+
+	m, err := LoadManifest(base)
+	if err != nil {
+		t.Fatalf("tightening override should merge cleanly, got: %v", err)
+	}
+	prod, err := m.ResolveEnv("prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prod.Policy.SyncPolicy != "protected" {
+		t.Errorf("SyncPolicy = %q, want protected", prod.Policy.SyncPolicy)
+	}
+	if len(prod.Policy.AllowSyncTo) != 1 || prod.Policy.AllowSyncTo[0] != "stage" {
+		t.Errorf("AllowSyncTo = %v, want [stage] (shrunk by override)", prod.Policy.AllowSyncTo)
 	}
 }
 

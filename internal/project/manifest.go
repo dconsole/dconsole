@@ -90,7 +90,9 @@ func LoadManifest(path string) (*Manifest, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", overridePath, err)
 		}
-		mergeOverride(m, ov)
+		if err := mergeOverride(m, ov); err != nil {
+			return nil, fmt.Errorf("%s: %w", overridePath, err)
+		}
 		m.OverridePath = ov.AbsPath
 	}
 	return m, nil
@@ -125,7 +127,9 @@ func LoadManifestByName(name, path string) (*Manifest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", regOv, err)
 	}
-	mergeOverride(m, ov)
+	if err := mergeOverride(m, ov); err != nil {
+		return nil, fmt.Errorf("%s: %w", regOv, err)
+	}
 	m.OverridePath = ov.AbsPath
 	return m, nil
 }
@@ -213,7 +217,14 @@ func loadManifestFile(path string, opts manifestLoadOpts) (*Manifest, error) {
 // project is intentionally NOT overridden — the base file owns the
 // project's identity. If callers really need to rename the project at
 // the override layer they can edit dconsole.yml directly.
-func mergeOverride(base, ov *Manifest) {
+//
+// Policy fields are tightening-only: any env block in ov whose policy
+// loosens the committed policy is refused. This is accident-prevention
+// for the "I just wanted to swap my ssh key" override that silently
+// also un-protects prod. The committed manifest is of course still
+// editable by anyone with repo write access — the point is to make the
+// weakening attempt visible at load time instead of at sql:sync time.
+func mergeOverride(base, ov *Manifest) error {
 	if ov.DefaultEnv != "" {
 		base.DefaultEnv = ov.DefaultEnv
 	}
@@ -223,12 +234,20 @@ func mergeOverride(base, ov *Manifest) {
 	// so we call MergeDefaults(base, ov).
 	base.Defaults = alias.MergeDefaults(base.Defaults, ov.Defaults)
 	for name, ovEnv := range ov.Envs {
-		if existing, ok := base.Envs[name]; ok {
-			base.Envs[name] = alias.MergeDefaults(existing, ovEnv)
-		} else {
+		existing, ok := base.Envs[name]
+		if !ok {
+			// Envs introduced by the override have no base to measure
+			// against, so any policy they declare stands on its own.
 			base.Envs[name] = ovEnv
+			continue
 		}
+		merged := alias.MergeDefaults(existing, ovEnv)
+		if err := alias.ValidatePolicyOverride(existing.Policy, merged.Policy); err != nil {
+			return fmt.Errorf("env %q: %w", name, err)
+		}
+		base.Envs[name] = merged
 	}
+	return nil
 }
 
 // FindManifest walks up from `start` looking for a manifest — either
